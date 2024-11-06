@@ -1,0 +1,6 @@
+{
+    "device":0,
+    "model":"gin",
+    "data":"proteins",
+    "epochs":100
+}
