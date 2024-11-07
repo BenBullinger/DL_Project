@@ -2,10 +2,10 @@ import torch
 from torch import Tensor
 import torch_geometric.typing
 from torch_geometric.data import Data
-
 import torch_geometric.transforms as T
 from torch_geometric.transforms import BaseTransform
 
+from tqdm import tqdm
 from typing import Any, Optional
 
 def add_node_attr(
@@ -46,8 +46,11 @@ class ConcatToNodeFeatures(BaseTransform):
         self.attr_name = attr_name
 
     def forward(self, data:Data) -> Data:
-        data.x = torch.cat((data.x, data[self.attr_name]), dim=1)
-        return data
+        if data.x is not None:
+            data.x = torch.cat((data.x, data[self.attr_name]), dim=1)
+        else:
+            data.x = data[self.attr_name]
+            return data
 
 class SampleTransform(BaseTransform):
     """
@@ -63,6 +66,6 @@ class SampleTransform(BaseTransform):
         data = add_node_attr(data, "You run sample transform", attr_name="sample_check")
 
 def explicit_preprocess(datalist, transform):
-    for idx in range(len(datalist)):
+    for idx in tqdm(range(len(datalist)), desc="Preprocessing the dataset"):
         datalist[idx] = transform(datalist[idx])
     return datalist
