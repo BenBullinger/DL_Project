@@ -1,7 +1,7 @@
 {
     "device":0,
-    "model":"gt",
-    "data":"proteins",
+    "model":"gin",
+    "data":"collab",
     "epochs":100,
     "laplacePE":2
 }

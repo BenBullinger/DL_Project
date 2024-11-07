@@ -32,7 +32,7 @@ def preprocess_dataset(config):
     transforms = []
     if config.sample_transform:
         transforms.append(SampleTransform())
-
+    transforms.append(InitEmptyNodeFeatures(dimension=config.init_nodefeatures_dim, strategy=config.init_nodefeatures_strategy))
     if config.laplacePE > 0:
         transforms.append(T.AddLaplacianEigenvectorPE(k=config.laplacePE, attr_name="laplacePE"))
         if config.model == "gin":
@@ -46,11 +46,29 @@ class ConcatToNodeFeatures(BaseTransform):
         self.attr_name = attr_name
 
     def forward(self, data:Data) -> Data:
-        if data.x is not None:
-            data.x = torch.cat((data.x, data[self.attr_name]), dim=1)
-        else:
-            data.x = data[self.attr_name]
-            return data
+        assert data.x is not None, "If you see this error, Robert failed debugging the node feature init properly (tell him pls)"
+        data.x = torch.cat((data.x, data[self.attr_name]), dim=1)
+        return data
+    
+class InitEmptyNodeFeatures(BaseTransform):
+    def __init__(self,
+                 dimension: int,
+                 strategy: str="ones"):
+        self.k = dimension
+        self.strategy = strategy
+
+    def forward(self, data:Data) -> Data:
+        if data.x is None: #We are only doing this, if there are no node features
+            if self.strategy == "random":
+                # Initialize node features with random values
+                data.x = torch.rand(data.num_nodes, self.k, dtype=torch.float, device=data.edge_index.device)
+            if self.strategy == "ones":
+                # Initialize node features with ones
+                data.x = torch.ones(data.num_nodes, self.k, dtype=torch.float, device=data.edge_index.device)
+            if self.strategy == "zeroes":
+                # Initialize node features with ones
+                data.x = torch.zeros(data.num_nodes, self.k, dtype=torch.float, device=data.edge_index.device)
+        return data
 
 class SampleTransform(BaseTransform):
     """

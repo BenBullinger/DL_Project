@@ -16,6 +16,8 @@ def command_line_parser():
     parser.add_argument('--data', type=str.upper, default='proteins', choices=["collab","enzymes","proteins","reddit"])
     parser.add_argument('--dropout', type=float, default=0, help="Probability of dropping out parameters")
     parser.add_argument('--laplacePE', type=int, default=0, help="Specifies the number of Laplacian eigenvectors to add as positional encodings to each graph node.")
+    parser.add_argument('--init_nodefeatures_dim', type=int, default=8, help="Dimension of initialized node features. (If the dataset has none)")
+    parser.add_argument('--init_nodefeatures_strategy', type=str, default="ones", choices=["random", "zeros", "ones"], help="Strategy to initialize node features (if the dataset has none): 'random' values, all 'zeros', or all 'ones'.")
     parser.add_argument('--sample_transform', action='store_true', help="If passed, adds the sample transform to check the preprocess example.")
     
     args = parser.parse_args()

@@ -22,7 +22,9 @@ def train_and_eval(args):
         dataset_name += "-BINARY"
     dataset = TUDataset(root="data/TUDataset", name=dataset_name, use_node_attr=True)
     total_size = len(dataset)
+    input(list(dataset)[0])
     datalist_prepocessed = explicit_preprocess(datalist=list(dataset), transform=preprocess_dataset(args))
+    input(datalist_prepocessed[0])
     train_size = int(0.8 * total_size) 
     val_size = int(0.1 * total_size)    
     test_size = total_size - train_size - val_size
