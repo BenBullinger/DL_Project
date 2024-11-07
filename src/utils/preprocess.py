@@ -61,3 +61,8 @@ class SampleTransform(BaseTransform):
         Here, you can write your transform on a single graph, it is then applied on a full dataset
         """
         data = add_node_attr(data, "You run sample transform", attr_name="sample_check")
+
+def explicit_preprocess(datalist, transform):
+    for idx in range(len(datalist)):
+        datalist[idx] = transform(datalist[idx])
+    return datalist

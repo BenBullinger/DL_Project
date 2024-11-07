@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import random_split
 from src.nn.gin import GIN
 from src.nn.graph_transformer import GraphTransformerNet
-from src.utils.preprocess import preprocess_dataset
+from src.utils.preprocess import preprocess_dataset, explicit_preprocess
 
 def train_and_eval(args):
     if args.verbose:
@@ -20,21 +20,21 @@ def train_and_eval(args):
     # Load the PROTEINS dataset
     if dataset_name in ["REDDIT", "IMDB"]:
         dataset_name += "-BINARY"
-    dataset = TUDataset(root="data/TUDataset", name=dataset_name, transform=preprocess_dataset(args))
+    dataset = TUDataset(root="data/TUDataset", name=dataset_name, use_node_attr=True)
     total_size = len(dataset)
+    datalist_prepocessed = explicit_preprocess(datalist=list(dataset), transform=preprocess_dataset(args))
     train_size = int(0.8 * total_size) 
     val_size = int(0.1 * total_size)    
     test_size = total_size - train_size - val_size
     
-    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
-    
+    train_dataset, val_dataset, test_dataset = random_split(datalist_prepocessed, [train_size, val_size, test_size])
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-    
+
     if args.model == "gin":
         model = GIN(
-            in_channels=dataset.num_features,
+            in_channels=datalist_prepocessed[0].x.shape[1],
             hidden_channels=16,
             layers=1,
             out_channels=dataset.num_classes,
@@ -47,7 +47,7 @@ def train_and_eval(args):
         ).to(device)
     if args.model == "gt":
         model = GraphTransformerNet(
-            node_dim_in=dataset.num_features,
+            node_dim_in=datalist_prepocessed[0].x.shape[1],
             edge_dim_in=dataset.num_edge_features,
             out_dim=dataset.num_classes,
             pe_in_dim=args.laplacePE,
