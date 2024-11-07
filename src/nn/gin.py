@@ -5,27 +5,10 @@ import torch.nn.functional as F
 
 from torch_geometric.nn import GINConv, global_add_pool, global_mean_pool, global_max_pool
 
+from .mlp import get_mlp
 
 supported_norms = {'layernorm': torch.nn.LayerNorm, 'batchnorm':torch.nn.BatchNorm1d, 'none':torch.nn.Identity}
 supported_pools = {'add': global_add_pool, 'mean': global_mean_pool, 'max': global_max_pool}
-
-def get_mlp(input_dim, hidden_dim, mlp_depth, output_dim, normalization, dropout=0.0, last_relu = True):
-    """
-    Creates a classical MLP. The first layer is input_dim x hidden_dim, the last layer is hidden_dim x output_dim. The rest is hidden x hidden
-    For normalization, pass the corresponding torch.nn function from here: https://pytorch.org/docs/stable/nn.html#normalization-layers
-    (e.g.: get_mlp(5,10,4,3, torch.nn.LayerNorm))
-    """
-    relu_layer = torch.nn.ReLU()
-    modules = [torch.nn.Linear(input_dim, int(hidden_dim)), normalization(int(hidden_dim)), relu_layer, torch.nn.Dropout(dropout)]
-    for i in range(0, int(mlp_depth)):
-        modules = modules + [torch.nn.Linear(int(hidden_dim), int(hidden_dim)), normalization(int(hidden_dim)), relu_layer, torch.nn.Dropout(dropout)]
-    modules = modules + [torch.nn.Linear(int(hidden_dim), output_dim)]
-    
-    if last_relu:
-        modules.append(normalization(output_dim))
-        modules.append(relu_layer)
-
-    return torch.nn.Sequential(*modules)
   
 
 class GIN(torch.nn.Module):
@@ -52,7 +35,7 @@ class GIN(torch.nn.Module):
             self.readout = supported_pools.get(use_readout, global_add_pool)
 
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, x, edge_index, batch, **kwargs):
         if self.enc is not None:
             x = self.enc(x)
         

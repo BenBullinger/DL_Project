@@ -5,8 +5,9 @@ from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
 import torch.nn.functional as F
 from torch.utils.data import random_split
-from src.models import GIN
-
+from src.nn.gin import GIN
+from src.nn.graph_transformer import GraphTransformerNet
+from src.utils.preprocess import preprocess_dataset
 
 def train_and_eval(args):
     if args.verbose:
@@ -19,7 +20,7 @@ def train_and_eval(args):
     # Load the PROTEINS dataset
     if dataset_name in ["REDDIT", "IMDB"]:
         dataset_name += "-BINARY"
-    dataset = TUDataset(root="data/TUDataset", name=dataset_name)
+    dataset = TUDataset(root="data/TUDataset", name=dataset_name, transform=preprocess_dataset(args))
     total_size = len(dataset)
     train_size = int(0.8 * total_size) 
     val_size = int(0.1 * total_size)    
@@ -39,19 +40,26 @@ def train_and_eval(args):
             out_channels=dataset.num_classes,
             mlp_depth=2,
             normalization="layernorm",
-            dropout=0,
+            dropout=args.dropout,
             use_enc=True,
             use_dec=True,
             use_readout="add"
         ).to(device)
     if args.model == "gt":
-        raise NotImplementedError("Graph Transformers have yet to be implemented")
-    
+        model = GraphTransformerNet(
+            node_dim_in=dataset.num_features,
+            edge_dim_in=dataset.num_edge_features,
+            out_dim=dataset.num_classes,
+            pe_in_dim=args.laplacePE,
+            hidden_dim=64,
+            num_heads=8,
+            dropout=args.dropout
+        ).to(device)
     
     train(model, train_loader, val_loader, args=args)
 
 
-def train(model, train_loader, val_loader, args):
+def train(model, train_loader, val_loader, args, **kwargs):
     device = args.device
     # Set up optimizer and loss function
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -67,7 +75,7 @@ def train(model, train_loader, val_loader, args):
             batch.to(device)
             optimizer.zero_grad()
 
-            output = model(batch.x, batch.edge_index, batch.batch)
+            output = model(batch.x, batch.edge_index, batch.batch, edge_attr=None, laplacePE=batch.laplacePE)
             
             # Compute loss
             loss = loss_fn(output, batch.y)
@@ -102,7 +110,7 @@ def evaluate(model, val_loader, args):
             batch.to(args.device)
             
             # Forward pass
-            output = model(batch.x, batch.edge_index, batch.batch)
+            output = model(batch.x, batch.edge_index, batch.batch, edge_attr=None, laplacePE=batch.laplacePE)
             
             # Compute loss
             loss = loss_fn(output, batch.y)
