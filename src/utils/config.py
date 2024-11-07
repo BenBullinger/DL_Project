@@ -12,6 +12,7 @@ def command_line_parser():
     parser.add_argument('-device', type=int, default=0, help="Assign GPU slot to the task (use -1 for cpu)")
     parser.add_argument('-v-','--verbose', action='store_true', help="If passed, enables verbose output.")
     parser.add_argument('--model', type=str.lower, default='gin', choices=["gin", "gt"], help="Selects the model.")
+    parser.add_argument('--hidden_channels', type=int, default=16, help="Dimension of the hidden representaion")
     parser.add_argument('--epochs', type=int, default=100, help="Specifies the number of training epochs")
     parser.add_argument('--data', type=str.upper, default='proteins', choices=["collab","enzymes","proteins","reddit"])
     parser.add_argument('--dropout', type=float, default=0, help="Probability of dropping out parameters")

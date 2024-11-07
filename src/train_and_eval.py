@@ -17,14 +17,27 @@ def train_and_eval(args):
     device = args.device
     dataset_name = args.data.upper()
     
-    # Load the PROTEINS dataset
+    ########################
+    """
+    TODO: The following has yet to be implemented
+    1. 
+        Check what dataset name is specified and either fetch it from TUDataset, or from GNNBenchmarkDataset
+        (https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.datasets.GNNBenchmarkDataset.html#torch_geometric.datasets.GNNBenchmarkDataset)
+        Given the dataset_name is CIFAR10, ideally you initialise it as
+        dataset = GNNBenchmarkDataset(root=data/GGNBenchmarkDataset, name='CIFAR10')
+
+    2. 
+        Come up with a logic where we can use pre_transform to store the prepocessed graphs instead of preprocessing them all the time
+    3. 
+        Fix not only seeds, but also ensure that it is always the same set of train/val/test dataset instead of sampling randomly
+        (probably we can set the seed to 0 first, then sample the dataset and then set the seed to some other value if needed)
+    """
     if dataset_name in ["REDDIT", "IMDB"]:
         dataset_name += "-BINARY"
     dataset = TUDataset(root="data/TUDataset", name=dataset_name, use_node_attr=True)
+    #######################
     total_size = len(dataset)
-    input(list(dataset)[0])
     datalist_prepocessed = explicit_preprocess(datalist=list(dataset), transform=preprocess_dataset(args))
-    input(datalist_prepocessed[0])
     train_size = int(0.8 * total_size) 
     val_size = int(0.1 * total_size)    
     test_size = total_size - train_size - val_size
@@ -37,7 +50,7 @@ def train_and_eval(args):
     if args.model == "gin":
         model = GIN(
             in_channels=datalist_prepocessed[0].x.shape[1],
-            hidden_channels=16,
+            hidden_channels=args.hidden_channel,
             layers=1,
             out_channels=dataset.num_classes,
             mlp_depth=2,
@@ -53,7 +66,7 @@ def train_and_eval(args):
             edge_dim_in=dataset.num_edge_features,
             out_dim=dataset.num_classes,
             pe_in_dim=args.laplacePE,
-            hidden_dim=64,
+            hidden_dim=args.hidden_channel,
             num_heads=8,
             dropout=args.dropout
         ).to(device)
