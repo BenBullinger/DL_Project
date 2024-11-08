@@ -13,5 +13,12 @@ This is a short introduciton how to run things:
 
 To run wandb logging, add your API key to `wandb.key`. (Wandb logging is currently unimplemented)
 
+### Running Experiments:
+To run an experiment, use the following command:
+
+```bash
+python start.py --config data/configs/sample_config.json
+```
+
 ### Societal impact:
-It generates some Co2 emmission to run it
+Too many mambas might collapse the ecosystem.

@@ -1,7 +1,9 @@
 {
-    "device":0,
-    "model":"gin",
+    "device": "cpu",
+    "model":"gt",
     "data":"proteins",
     "epochs":100,
-    "laplacePE":2
+    "laplacePE":2,
+    "hidden_channel":64,
+    "dropout":0.5
 }
