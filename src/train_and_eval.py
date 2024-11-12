@@ -8,6 +8,7 @@ from torch.utils.data import random_split
 from src.nn.gin import GIN
 from src.nn.graph_transformer import GraphTransformerNet
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess
+from src.nn.gamba import Gamba
 
 def train_and_eval(args):
     if args.verbose:
@@ -60,7 +61,7 @@ def train_and_eval(args):
             use_dec=True,
             use_readout="add"
         ).to(device)
-    if args.model == "gt":
+    elif args.model == "gt":
         model = GraphTransformerNet(
             node_dim_in=datalist_prepocessed[0].x.shape[1],
             edge_dim_in=dataset.num_edge_features,
@@ -69,6 +70,19 @@ def train_and_eval(args):
             hidden_dim=args.hidden_channel,
             num_heads=8,
             dropout=args.dropout
+        ).to(device)
+    elif args.model == "gamba":
+        model = Gamba(
+            in_channels=datalist_prepocessed[0].x.shape[1],
+            hidden_channels=args.hidden_channel,
+            layers=1,
+            out_channels=dataset.num_classes,
+            mlp_depth=2,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            use_readout="add"
         ).to(device)
     
     train(model, train_loader, val_loader, args=args)
@@ -90,7 +104,10 @@ def train(model, train_loader, val_loader, args, **kwargs):
             batch.to(device)
             optimizer.zero_grad()
 
-            output = model(batch.x, batch.edge_index, batch.batch, edge_attr=None, laplacePE=batch.laplacePE)
+            # Get edge_attr from batch if it exists, otherwise None
+            edge_attr = getattr(batch, 'edge_attr', None)
+            output = model(batch.x, batch.edge_index, batch.batch, 
+                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
             
             # Compute loss
             loss = loss_fn(output, batch.y)
@@ -124,8 +141,10 @@ def evaluate(model, val_loader, args):
             # Move batch to the device
             batch.to(args.device)
             
-            # Forward pass
-            output = model(batch.x, batch.edge_index, batch.batch, edge_attr=None, laplacePE=batch.laplacePE)
+            # Get edge_attr from batch if it exists, otherwise None
+            edge_attr = getattr(batch, 'edge_attr', None)
+            output = model(batch.x, batch.edge_index, batch.batch,
+                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
             
             # Compute loss
             loss = loss_fn(output, batch.y)

@@ -11,6 +11,9 @@ This is a short introduciton how to run things:
 * Install PyG dependencies `pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cu124.html`
 * Install other dependencies `pip install wandb`
 
+
+* To run gamba install transformers `pip install transformers`
+
 To run wandb logging, add your API key to `wandb.key`. (Wandb logging is currently unimplemented)
 
 ### Running Experiments:
