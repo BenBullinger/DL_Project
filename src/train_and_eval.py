@@ -1,13 +1,14 @@
 import json
 import torch
 from tqdm import tqdm
-from torch_geometric.datasets import TUDataset
+from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
 import torch.nn.functional as F
-from torch.utils.data import random_split
 from src.nn.gin import GIN
 from src.nn.graph_transformer import GraphTransformerNet
-from src.utils.preprocess import preprocess_dataset, explicit_preprocess
+from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
+from src.utils.dataset import load_data
+from src.nn.gamba import Gamba
 
 def train_and_eval(args):
     if args.verbose:
@@ -17,58 +18,43 @@ def train_and_eval(args):
     device = args.device
     dataset_name = args.data.upper()
     
-    ########################
-    """
-    TODO: The following has yet to be implemented
-    1. 
-        Check what dataset name is specified and either fetch it from TUDataset, or from GNNBenchmarkDataset
-        (https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.datasets.GNNBenchmarkDataset.html#torch_geometric.datasets.GNNBenchmarkDataset)
-        Given the dataset_name is CIFAR10, ideally you initialise it as
-        dataset = GNNBenchmarkDataset(root=data/GGNBenchmarkDataset, name='CIFAR10')
-
-    2. 
-        Come up with a logic where we can use pre_transform to store the prepocessed graphs instead of preprocessing them all the time
-    3. 
-        Fix not only seeds, but also ensure that it is always the same set of train/val/test dataset instead of sampling randomly
-        (probably we can set the seed to 0 first, then sample the dataset and then set the seed to some other value if needed)
-    """
-    if dataset_name in ["REDDIT", "IMDB"]:
-        dataset_name += "-BINARY"
-    dataset = TUDataset(root="data/TUDataset", name=dataset_name, use_node_attr=True)
-    #######################
-    total_size = len(dataset)
-    datalist_prepocessed = explicit_preprocess(datalist=list(dataset), transform=preprocess_dataset(args))
-    train_size = int(0.8 * total_size) 
-    val_size = int(0.1 * total_size)    
-    test_size = total_size - train_size - val_size
+    train_loader, val_loader, test_loader, task_info = load_data(args)
     
-    train_dataset, val_dataset, test_dataset = random_split(datalist_prepocessed, [train_size, val_size, test_size])
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-
     if args.model == "gin":
         model = GIN(
-            in_channels=datalist_prepocessed[0].x.shape[1],
+            in_channels=task_info["node_feature_dims"],
             hidden_channels=args.hidden_channel,
             layers=1,
-            out_channels=dataset.num_classes,
+            out_channels=task_info["output_dims"],
             mlp_depth=2,
             normalization="layernorm",
             dropout=args.dropout,
             use_enc=True,
             use_dec=True,
-            use_readout="add"
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
-    if args.model == "gt":
+    elif args.model == "gt":
         model = GraphTransformerNet(
-            node_dim_in=datalist_prepocessed[0].x.shape[1],
-            edge_dim_in=dataset.num_edge_features,
-            out_dim=dataset.num_classes,
+            node_dim_in=task_info["node_feature_dims"],
+            edge_dim_in=task_info["edge_feature_dims"],
+            out_dim=task_info["output_dims"],
             pe_in_dim=args.laplacePE,
             hidden_dim=args.hidden_channel,
             num_heads=8,
             dropout=args.dropout
+        ).to(device)
+    elif args.model == "gamba":
+        model = Gamba(
+            in_channels=task_info["node_feature_dims"],
+            hidden_channels=args.hidden_channel,
+            layers=1,
+            out_channels=task_info["output_dims"],
+            mlp_depth=2,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
     
     train(model, train_loader, val_loader, args=args)
@@ -90,7 +76,10 @@ def train(model, train_loader, val_loader, args, **kwargs):
             batch.to(device)
             optimizer.zero_grad()
 
-            output = model(batch.x, batch.edge_index, batch.batch, edge_attr=None, laplacePE=batch.laplacePE)
+            # Get edge_attr from batch if it exists, otherwise None
+            edge_attr = getattr(batch, 'edge_attr', None)
+            output = model(batch.x, batch.edge_index, batch.batch, 
+                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
             
             # Compute loss
             loss = loss_fn(output, batch.y)
@@ -110,8 +99,6 @@ def train(model, train_loader, val_loader, args, **kwargs):
             val_loss, val_accuracy = evaluate(model, val_loader, args)
             tqdm.write(f"Validation - Epoch {epoch}, Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.4f}")
 
-    print("Training completed.")
-
 def evaluate(model, val_loader, args):
     model.eval()
     total_loss = 0
@@ -124,8 +111,10 @@ def evaluate(model, val_loader, args):
             # Move batch to the device
             batch.to(args.device)
             
-            # Forward pass
-            output = model(batch.x, batch.edge_index, batch.batch, edge_attr=None, laplacePE=batch.laplacePE)
+            # Get edge_attr from batch if it exists, otherwise None
+            edge_attr = getattr(batch, 'edge_attr', None)
+            output = model(batch.x, batch.edge_index, batch.batch,
+                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
             
             # Compute loss
             loss = loss_fn(output, batch.y)

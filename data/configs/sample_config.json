@@ -1,7 +1,12 @@
 {
-    "device":0,
-    "model":"gin",
-    "data":"proteins",
+    "device": 0,
+    "model":"gamba",
+    "readout": "add",
+    "data":"CIFAR10",
     "epochs":100,
-    "laplacePE":2
+    "batch-size":32,
+    "laplacePE":3,
+    "hidden_channel":64,
+    "dropout":0.5,
+    "seed":0
 }
