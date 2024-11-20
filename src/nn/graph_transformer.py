@@ -380,6 +380,12 @@ class GraphTransformerNet(nn.Module):
         if self.pe_emb is not None and laplacePE is not None:
             x = x + self.pe_emb(laplacePE)
         if self.edge_emb is not None and edge_attr is not None:
+            if edge_attr.dim() == 1:
+                edge_attr = edge_attr.unsqueeze(-1)
+            if edge_attr.shape[-1] != self.edge_emb.in_features:
+                input(f"{edge_attr.shape} and {self.edge_emb.in_features}")
+                edge_attr = edge_attr.T            
+                input(f"{edge_attr.shape} and {self.edge_emb.in_features}")
             edge_attr = self.edge_emb(edge_attr)
 
         for gt_layer in self.gt_layers:
