@@ -8,13 +8,16 @@ from src.nn.gin import GIN
 from src.nn.graph_transformer import GraphTransformerNet
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
+from src.utils.misc import seed_everything
 from src.nn.gamba import Gamba
 
 def train_and_eval(args):
     if args.verbose:
         print("Running with the following arguments:")
         print(json.dumps(args.__dict__, indent=2))
-    
+
+    seed_everything(args.seed)
+
     device = args.device
     dataset_name = args.data.upper()
     
