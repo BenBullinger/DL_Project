@@ -1,5 +1,5 @@
 {
-    "device": 0,
+    "device": "cpu",
     "model":"gamba",
     "readout": "add",
     "data":"CIFAR10",

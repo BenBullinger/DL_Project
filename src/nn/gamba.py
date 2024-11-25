@@ -94,11 +94,12 @@ class Gamba(nn.Module):
             supported_pools = {'add': global_add_pool, 'mean': global_mean_pool, 'max': global_max_pool}
             self.readout = supported_pools.get(use_readout, global_add_pool)
         
+        # Add layer normalization
+        self.layer_norm = nn.LayerNorm(hidden_channels)
+        
     def forward(self, x, edge_index, batch, **kwargs):
-        # Initial GIN layer
         x = self.input_gin(x, edge_index)
         
-        # Main layers
         for layer in self.layers:
             # Regular message passing
             gin_out = layer['gin'](x, edge_index)
@@ -108,10 +109,9 @@ class Gamba(nn.Module):
             global_features = self.mamba(inputs_embeds=global_tokens).last_hidden_state
             global_update = global_features.mean(dim=1)
             
-            # Add global information to each node's features
-            x = gin_out + global_update[batch]
+            # Normalized feature combination
+            x = self.layer_norm(gin_out + 0.1 * global_update[batch])  # Scale global contribution
             
-        # Final GIN layer
         x = self.output_gin(x, edge_index)
         
         # Apply readout if specified
