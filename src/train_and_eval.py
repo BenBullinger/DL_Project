@@ -10,11 +10,44 @@ from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_sp
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything
 from src.nn.gamba import Gamba
+import wandb
+import subprocess
+
+wandb.init(
+    project="DL_Project",
+    config={}
+)
 
 def train_and_eval(args):
     if args.verbose:
         print("Running with the following arguments:")
         print(json.dumps(args.__dict__, indent=2))
+
+
+    if args.wandb:
+        print("Loading Weights & Biases configuration")
+        wandb.config.update({
+            "model": args.model,
+            "seed": args.seed,
+            "epochs": args.epochs,
+            "data": args.data,
+            "batch_size": args.batch_size,
+            "hidden_channels": args.hidden_channels,
+            "dropout": args.dropout,
+            "laplacePE": args.laplacePE,
+            "init_nodefeatures_dim": args.init_nodefeatures_dim,
+            "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
+            "readout": args.readout,
+            "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
+        })
+
+        # add Git hash to the run
+        try:
+            git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+            wandb.config.git_hash = git_hash
+            print(f"Logged Git hash: {git_hash}")
+        except subprocess.CalledProcessError as e:
+            print("Error retrieving Git hash. Make sure you are in a Git repository.", e)
 
     seed_everything(args.seed)
 
@@ -100,6 +133,9 @@ def train(model, train_loader, val_loader, args, **kwargs):
         # Display validation metrics
         if not epoch % 20 and val_loader is not None:
             val_loss, val_accuracy = evaluate(model, val_loader, args)
+            if(args.wandb):
+                wandb.log({"train_loss": total_loss / len(train_loader), "train_accuracy": correct / total_samples,
+                        "val_loss": val_loss, "val_accuracy": val_accuracy})
             tqdm.write(f"Validation - Epoch {epoch}, Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.4f}")
 
 def evaluate(model, val_loader, args):

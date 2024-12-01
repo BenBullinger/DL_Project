@@ -1,0 +1,13 @@
+{
+    "device": -1,
+    "model":"gamba",
+    "readout": "add",
+    "data":"CIFAR10",
+    "epochs":100,
+    "batch-size":32,
+    "laplacePE":3,
+    "hidden_channel":64,
+    "dropout":0.5,
+    "seed":0,
+    "wandb": true
+}

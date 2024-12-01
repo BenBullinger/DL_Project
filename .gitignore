@@ -2,3 +2,5 @@
 *__pycache__
 data/TUDataset
 data/GNNBenchmarkDataset
+wandb
+wandb.key
