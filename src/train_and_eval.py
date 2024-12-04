@@ -60,7 +60,7 @@ def train_and_eval(args):
             use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
     
-    train(model, train_loader, val_loader, args=args)
+    return train(model, train_loader, val_loader, args=args)
 
 
 def train(model, train_loader, val_loader, args, **kwargs):
@@ -101,6 +101,10 @@ def train(model, train_loader, val_loader, args, **kwargs):
         if not epoch % 20 and val_loader is not None:
             val_loss, val_accuracy = evaluate(model, val_loader, args)
             tqdm.write(f"Validation - Epoch {epoch}, Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.4f}")
+
+    # Should move this outside the epoch loop
+    if val_loader is not None:
+        return evaluate(model, val_loader, args)
 
 def evaluate(model, val_loader, args):
     model.eval()

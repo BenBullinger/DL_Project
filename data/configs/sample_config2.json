@@ -3,7 +3,7 @@
     "model":"gamba",
     "readout": "add",
     "data":"PROTEINS",
-    "epochs":20,
+    "epochs":10,
     "batch_size":32,
     "laplacePE":3,
     "hidden_channel":64,
