@@ -10,6 +10,7 @@ from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_sp
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
 from src.nn.gamba import Gamba
+from src.nn.ga import Ga
 import wandb
 import subprocess
 
@@ -26,7 +27,7 @@ def train_and_eval(args):
             naming = args.name
         else:
             naming = f"{args.model}_{args.data}"
-        print(f"Run name: {naming}")
+
         wandb.init(
             project="DL_Project",
             config={
@@ -97,6 +98,19 @@ def train_and_eval(args):
             use_dec=True,
             use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
+    elif args.model == "ga":
+        model = Ga(
+            in_channels=task_info["node_feature_dims"],
+            hidden_channels=args.hidden_channel,
+            layers=1,
+            out_channels=task_info["output_dims"],
+            mlp_depth=2,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+        )
     
     return train(model, train_loader, val_loader, args=args)
 
