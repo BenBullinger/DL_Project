@@ -8,7 +8,7 @@ from src.nn.gin import GIN
 from src.nn.graph_transformer import GraphTransformerNet
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
-from src.utils.misc import seed_everything
+from src.utils.misc import seed_everything, timer
 from src.nn.gamba import Gamba
 import wandb
 import subprocess
@@ -18,6 +18,7 @@ wandb.init(
     config={}
 )
 
+@timer
 def train_and_eval(args):
     if args.verbose:
         print("Running with the following arguments:")
