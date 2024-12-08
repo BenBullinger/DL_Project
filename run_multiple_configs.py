@@ -24,6 +24,9 @@ def get_default_config():
         "init_nodefeatures_strategy": "random",
         "wandb": True,
         "learning_rate": 1e-4,
+        "scheduler": "None",
+        "simon_gaa": False,
+        "num_virtual_tokens": 4,
         "patience": 20
     }
 
@@ -68,8 +71,8 @@ def run_experiments(config_files):
 if __name__ == "__main__":
     # List of configuration files
     config_files = [
-        #"data/configs/sample_config.json",
-        "data/configs/sample_config2.json",
+        "data/configs/sample_config.json",
+        #"data/configs/sample_config2.json",
         # Add more config files as needed
     ]
 

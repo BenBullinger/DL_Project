@@ -71,10 +71,12 @@ def train_and_eval(args):
             layers=1,
             out_channels=task_info["output_dims"],
             mlp_depth=2,
+            num_virtual_tokens=args.num_virtual_tokens,
             normalization="layernorm",
             dropout=args.dropout,
             use_enc=True,
             use_dec=True,
+            args=args,
             use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
     
@@ -117,7 +119,12 @@ def train(model, train_loader, val_loader, args, config=None):
             setattr(args, param, value)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    
+    scheduler_dict =  {
+        'None': torch.optim.lr_scheduler.LambdaLR(optimizer, (lambda x : 1), last_epoch=- 1, verbose=False),
+        'Plateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',factor=0.7, patience=12, threshold=0.1, threshold_mode='rel', min_lr=0.00001),
+    }
+    scheduler = scheduler_dict[args.scheduler]
+
     best_val_accuracy = 0
     patience = args.patience if hasattr(args, 'patience') else 20
     patience_counter = 0
@@ -155,6 +162,15 @@ def train(model, train_loader, val_loader, args, config=None):
         avg_loss = total_loss / len(train_loader)
         avg_accuracy = correct / total_samples
 
+        if val_loader is not None:
+            val_loss, val_accuracy = evaluate(model, val_loader, args)
+            scheduler_param_dict =  {
+            'None': None,
+            'Plateau': val_loss,
+            }
+            scheduler.step(scheduler_param_dict[args.scheduler])
+
+
         if not epoch % 20 and val_loader is not None:
             val_loss, val_accuracy = evaluate(model, val_loader, args)
             if args.wandb:
@@ -165,7 +181,7 @@ def train(model, train_loader, val_loader, args, config=None):
                     "val_accuracy": val_accuracy,
                     "epoch": epoch
                 })
-            tqdm.write(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}, Train Acc: {avg_accuracy:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
+            tqdm.write(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}, Train Acc: {avg_accuracy:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}, 'lr': {optimizer.param_groups[0]['lr']}")
 
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy

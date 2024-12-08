@@ -22,6 +22,7 @@ class GraphAttentionAggregator(nn.Module):
     def __init__(self, hidden_channels, num_virtual_tokens, args=None, num_attention_heads=4):
         super().__init__()
         self.num_virtual_tokens = num_virtual_tokens
+        self.args = args
         self.aggr = TokenAggregator()
         
         # Virtual tokens that will learn to attend to the graph
@@ -44,6 +45,15 @@ class GraphAttentionAggregator(nn.Module):
         
         x_batched = torch.zeros(batch_size, max(batch.bincount()), x.size(-1), device=x.device)
         #input(f"Virtual tokens at start:\n{virtual_tokens[0,:,:]}")
+        if self.args.simon_gaa:
+            out, _ = self.attention(
+            query=virtual_tokens,
+            key=x_batched,
+            value=x_batched
+            )
+
+            return out
+         
         for i in range(self.virtual_tokens.size(0)):
             query = aggregated_tokens
             out, _ = self.attention(
@@ -96,7 +106,8 @@ class Gamba(nn.Module):
                 'attention': GraphAttentionAggregator(
                     hidden_channels=hidden_channels,
                     num_virtual_tokens=num_virtual_tokens,
-                    num_attention_heads=num_attention_heads
+                    num_attention_heads=num_attention_heads,
+                    args=args
                 ),
                 'gin': GINConv(nn.Linear(hidden_channels, hidden_channels))
             })
