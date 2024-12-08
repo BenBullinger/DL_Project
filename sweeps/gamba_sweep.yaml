@@ -1,0 +1,41 @@
+program: start.py
+method: bayes
+metric:
+  name: val_accuracy
+  goal: maximize
+
+parameters:
+  model:
+    value: "gamba"
+  data:
+    value: "PROTEINS"
+  num_virtual_tokens:
+    values: [1, 2, 5, 10, 20]
+  hidden_channel:
+    values: [32, 64, 96, 128, 256]
+  dropout:
+    distribution: uniform
+    min: 0.0
+    max: 0.6
+  learning_rate:
+    distribution: log_uniform_values
+    min: 5e-5
+    max: 5e-3
+  batch_size:
+    values: [16, 32, 64, 128]
+  epochs:
+    value: 100
+  patience:
+    value: 20
+  laplacePE:
+    value: 3
+  wandb:
+    value: true
+  readout:
+    value: "add"
+  device:
+    value: "cpu"  # Change to cuda device number if using GPU
+
+early_terminate:
+  type: hyperband
+  min_iter: 20 

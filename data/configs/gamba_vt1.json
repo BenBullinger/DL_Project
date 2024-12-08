@@ -1,0 +1,14 @@
+{
+    "device": "cpu",
+    "model": "gamba",
+    "readout": "add",
+    "data": "PROTEINS",
+    "epochs": 100,
+    "batch_size": 32,
+    "laplacePE": 0,
+    "hidden_channel": 64,
+    "dropout": 0,
+    "seed": 0,
+    "verbose": false,
+    "num_virtual_tokens": 1
+} 

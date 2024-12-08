@@ -12,9 +12,6 @@ from src.utils.misc import seed_everything, timer
 from src.nn.gamba import Gamba
 import wandb
 import subprocess
-from ray import tune
-from ray.tune.schedulers import ASHAScheduler
-from ray.tune.search.optuna import OptunaSearch
 
 @timer
 def train_and_eval(args):
@@ -22,28 +19,12 @@ def train_and_eval(args):
         print("Running with the following arguments:")
         print(json.dumps(args.__dict__, indent=2))
 
-
     if args.wandb:
         wandb.init(
             project="DL_Project",
-            config={}
+            config=args.__dict__
         )
-        print("Loading Weights & Biases configuration")
-        wandb.config.update({
-            "model": args.model,
-            "seed": args.seed,
-            "epochs": args.epochs,
-            "data": args.data,
-            "batch_size": args.batch_size,
-            "hidden_channels": args.hidden_channel,
-            "dropout": args.dropout,
-            "laplacePE": args.laplacePE,
-            "init_nodefeatures_dim": args.init_nodefeatures_dim,
-            "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
-            "readout": args.readout,
-            # "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
-        })
-
+        
         # add Git hash to the run
         try:
             git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
@@ -93,46 +74,15 @@ def train_and_eval(args):
             dropout=args.dropout,
             use_enc=True,
             use_dec=True,
-            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None,
+            num_virtual_tokens=args.num_virtual_tokens
         ).to(device)
     
-    return train(model, train_loader, val_loader, args=args)
+    return train(model, train_loader, val_loader, args)
 
-
-def get_hyperparameter_space(model_name):
-    """Define hyperparameter search space for each model"""
-    if model_name == "gin":
-        return {
-            "hidden_channels": tune.choice([32, 64, 128, 256]),
-            "dropout": tune.uniform(0.0, 0.5),
-            "learning_rate": tune.loguniform(1e-4, 1e-2),
-            "layers": tune.choice([1, 2, 3, 4]),
-            "mlp_depth": tune.choice([1, 2, 3])
-        }
-    elif model_name == "gt":
-        return {
-            "hidden_channels": tune.choice([32, 64, 128, 256]),
-            "dropout": tune.uniform(0.0, 0.5),
-            "learning_rate": tune.loguniform(1e-4, 1e-2),
-            "num_heads": tune.choice([4, 8, 16])
-        }
-    elif model_name == "gamba":
-        return {
-            "hidden_channels": tune.choice([32, 64, 128, 256]),
-            "dropout": tune.uniform(0.0, 0.5),
-            "learning_rate": tune.loguniform(1e-4, 1e-2),
-            "layers": tune.choice([1, 2, 3, 4]),
-            "mlp_depth": tune.choice([1, 2, 3])
-        }
-
-def train(model, train_loader, val_loader, args, config=None):
-    """Modified training function to support hyperparameter tuning"""
+def train(model, train_loader, val_loader, args):
+    """Training function with optional W&B logging"""
     device = args.device
-    
-    # Use config parameters if provided (for hyperparameter tuning)
-    if config is not None:
-        for param, value in config.items():
-            setattr(args, param, value)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     
@@ -173,6 +123,8 @@ def train(model, train_loader, val_loader, args, config=None):
 
         if not epoch % 20 and val_loader is not None:
             val_loss, val_accuracy = evaluate(model, val_loader, args)
+            
+            # Only log to wandb if it's enabled
             if args.wandb:
                 wandb.log({
                     "train_loss": avg_loss, 
@@ -181,6 +133,7 @@ def train(model, train_loader, val_loader, args, config=None):
                     "val_accuracy": val_accuracy,
                     "epoch": epoch
                 })
+            
             tqdm.write(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}, Train Acc: {avg_accuracy:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
 
             if val_accuracy > best_val_accuracy:
@@ -192,19 +145,16 @@ def train(model, train_loader, val_loader, args, config=None):
             if patience_counter >= patience:
                 print(f"Early stopping at epoch {epoch}")
                 break
-            
-            # Report metrics to Ray Tune if we're doing hyperparameter optimization
-            if config is not None:
-                tune.report(
-                    val_accuracy=val_accuracy,
-                    val_loss=val_loss,
-                    train_accuracy=avg_accuracy,
-                    train_loss=avg_loss,
-                    epoch=epoch
-                )
 
     if val_loader is not None:
-        return evaluate(model, val_loader, args)
+        final_val_loss, final_val_accuracy = evaluate(model, val_loader, args)
+        # Log final metrics only if wandb is enabled
+        if args.wandb:
+            wandb.log({
+                "final_val_loss": final_val_loss,
+                "final_val_accuracy": final_val_accuracy
+            })
+        return final_val_loss, final_val_accuracy
 
 def evaluate(model, val_loader, args):
     model.eval()
@@ -219,7 +169,7 @@ def evaluate(model, val_loader, args):
             
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
-                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE) )
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)
@@ -236,52 +186,11 @@ def evaluate(model, val_loader, args):
     
     return avg_loss, accuracy
 
-def run_hyperparameter_optimization(args):
-    """Run hyperparameter optimization using Ray Tune"""
-    search_space = get_hyperparameter_space(args.model)
-    
-    scheduler = ASHAScheduler(
-        max_t=args.epochs,
-        grace_period=10,
-        reduction_factor=2
-    )
-    
-    search_algo = OptunaSearch()
-    
-    analysis = tune.run(
-        tune.with_parameters(train_and_eval, args=args),
-        config=search_space,
-        num_samples=50,  # number of trials
-        scheduler=scheduler,
-        search_alg=search_algo,
-        resources_per_trial={"cpu": 2, "gpu": 0.5},  # adjust based on your hardware
-        metric="val_accuracy",
-        mode="max",
-        name=f"hpo_{args.model}_{args.data}"
-    )
-    
-    best_trial = analysis.get_best_trial("val_accuracy", "max", "last")
-    print(f"Best trial config: {best_trial.config}")
-    print(f"Best trial final validation accuracy: {best_trial.last_result['val_accuracy']}")
-    
-    return best_trial.config
-
-def main(args):
-    if args.optimize_hyperparams:
-        best_config = run_hyperparameter_optimization(args)
-        # Save best config for future use
-        with open(f"best_config_{args.model}_{args.data}.json", "w") as f:
-            json.dump(best_config, f)
-    else:
-        train_and_eval(args)
-
 if __name__ == "__main__":
     # Only execute if run directly, not when imported
     import argparse
     parser = argparse.ArgumentParser()
-    # Add your arguments here
-    parser.add_argument("--optimize_hyperparams", action="store_true", help="Run hyperparameter optimization")
     parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
     args = parser.parse_args()
-    main(args)
+    train_and_eval(args)

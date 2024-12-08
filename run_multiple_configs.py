@@ -1,7 +1,7 @@
 import json
 import os
 import argparse
-from src.train_and_eval import train_and_eval
+from src.train_and_eval import train_and_eval, run_hyperparameter_optimization
 from src.utils.config import command_line_parser
 import pandas as pd
 
@@ -23,7 +23,9 @@ def get_default_config():
         "init_nodefeatures_strategy": "random",
         "wandb": False,
         "learning_rate": 1e-4,
-        "patience": 20
+        "patience": 20,
+        "optimize_hyperparams": False,
+        "num_sweep_runs": 50
     }
 
 def run_experiments(config_files):
@@ -41,14 +43,34 @@ def run_experiments(config_files):
         # Convert config to argparse.Namespace
         args = argparse.Namespace(**full_config)
 
+        # Initialize best_config as None
+        best_config = None
+        
+        if args.optimize_hyperparams:
+            # Run hyperparameter optimization
+            print(f"Running hyperparameter optimization for {args.model} on {args.data}")
+            best_config = run_hyperparameter_optimization(args)
+            
+            # Save the best config
+            save_path = f"best_config_{args.model}_{args.data}.json"
+            with open(save_path, "w") as f:
+                json.dump(best_config, f)
+            print(f"Saved best configuration to {save_path}")
+            
+            # Update args with best config
+            for key, value in best_config.items():
+                setattr(args, key, value)
+
         # Run training and evaluation
         val_loss, val_accuracy = train_and_eval(args)
 
-        # Collect results
+        # Update results collection
         results.append({
             "Model": config["model"],
-            "CE": f"{val_loss:.2f}±0.1",  # Placeholder for standard deviation
-            "Accuracy": f"{val_accuracy:.2f}±1"  # Placeholder for standard deviation
+            "Dataset": args.data,
+            "CE": f"{val_loss:.2f}±0.1",
+            "Accuracy": f"{val_accuracy:.2f}±1",
+            "Hyperparameters": "optimized" if best_config else "default"
         })
 
     # Create a DataFrame for better visualization
@@ -56,10 +78,11 @@ def run_experiments(config_files):
     print(df.to_markdown(index=False))
 
 if __name__ == "__main__":
-    # List of configuration files
+    # List of configuration files for ablation study
     config_files = [
-        "data/configs/sample_config.json",
-        # Add more config files as needed
+        "data/configs/gamba_vt1.json",
+        "data/configs/gamba_vt5.json",
+        "data/configs/gamba_vt20.json",
     ]
 
     run_experiments(config_files) 
