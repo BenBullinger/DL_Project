@@ -38,7 +38,8 @@ def run_experiments(config_files):
 
         # Convert config to argparse.Namespace
         args = argparse.Namespace(**full_config)
-
+        
+        print(f"Running experiment with config: {config_file}")
         # Run training and evaluation
         val_loss, val_accuracy = train_and_eval(args)
 
@@ -57,6 +58,7 @@ if __name__ == "__main__":
     # List of configuration files
     config_files = [
         "data/configs/sample_config.json",
+        "data/configs/sample_config2.json",
         # Add more config files as needed
     ]
 

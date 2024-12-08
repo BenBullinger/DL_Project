@@ -21,25 +21,30 @@ def train_and_eval(args):
 
 
     if args.wandb:
+        print("Loading Weights & Biases configuration")
+        if(hasattr(args, "name")):
+            naming = args.name
+        else:
+            naming = f"{args.model}_{args.data}"
+        print(f"Run name: {naming}")
         wandb.init(
             project="DL_Project",
-            config={}
+            config={
+                "model": args.model,
+                "seed": args.seed,
+                "epochs": args.epochs,
+                "data": args.data,
+                "batch_size": args.batch_size,
+                "hidden_channels": args.hidden_channel,
+                "dropout": args.dropout,
+                "laplacePE": args.laplacePE,
+                "init_nodefeatures_dim": args.init_nodefeatures_dim,
+                "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
+                "readout": args.readout,
+                # "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
+            },
+            name=naming
         )
-        print("Loading Weights & Biases configuration")
-        wandb.config.update({
-            "model": args.model,
-            "seed": args.seed,
-            "epochs": args.epochs,
-            "data": args.data,
-            "batch_size": args.batch_size,
-            "hidden_channels": args.hidden_channel,
-            "dropout": args.dropout,
-            "laplacePE": args.laplacePE,
-            "init_nodefeatures_dim": args.init_nodefeatures_dim,
-            "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
-            "readout": args.readout,
-            # "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
-        })
 
         # add Git hash to the run
         try:
@@ -141,6 +146,7 @@ def train(model, train_loader, val_loader, args, **kwargs):
                     "epoch": epoch
                 })
             tqdm.write(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}, Train Acc: {avg_accuracy:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
+    wandb.finish()
 
     if val_loader is not None:
         return evaluate(model, val_loader, args)

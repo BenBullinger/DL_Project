@@ -9,5 +9,6 @@
     "hidden_channel":64,
     "dropout":0.5,
     "seed":0,
-    "verbose": false
+    "verbose": false,
+    "wandb": true
 }
