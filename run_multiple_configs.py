@@ -57,7 +57,6 @@ if __name__ == "__main__":
     # List of configuration files
     config_files = [
         "data/configs/sample_config.json",
-        "data/configs/sample_config2.json",
         # Add more config files as needed
     ]
 

@@ -116,7 +116,7 @@ def train(model, train_loader, val_loader, args, **kwargs):
             # Get edge_attr from batch if it exists, otherwise None
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch, 
-                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
             
             # Compute loss
             loss = loss_fn(output, batch.y)
@@ -158,7 +158,7 @@ def evaluate(model, val_loader, args):
             # Get edge_attr from batch if it exists, otherwise None
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
-                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE) )
             
             # Compute loss
             loss = loss_fn(output, batch.y)

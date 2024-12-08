@@ -34,7 +34,7 @@ def TUDatasetLoader(args, dataset_name):
         dataset_name += "-BINARY"
     dataset = TUDataset(root="data/TUDataset", name=dataset_name, use_node_attr=True)
     datalist_prepocessed = explicit_preprocess(datalist=list(dataset), transform=preprocess_dataset(args))
-    train_dataset, val_dataset, test_dataset = fix_splits(dataset=datalist_prepocessed, ratio=(0.8,0.1,0.1), shuffle=False)
+    train_dataset, val_dataset, test_dataset = fix_splits(dataset=datalist_prepocessed, ratio=(0.8,0.1,0.1), shuffle=True)
     
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
