@@ -1,4 +1,5 @@
-# Gamba without Mamba:
+# Gamba without Mamba => Ga
+
 from src.nn.gamba import Gamba
 
 class Ga(Gamba):
