@@ -13,11 +13,6 @@ from src.nn.gamba import Gamba
 import wandb
 import subprocess
 
-wandb.init(
-    project="DL_Project",
-    config={}
-)
-
 @timer
 def train_and_eval(args):
     if args.verbose:
@@ -26,6 +21,10 @@ def train_and_eval(args):
 
 
     if args.wandb:
+        wandb.init(
+            project="DL_Project",
+            config={}
+        )
         print("Loading Weights & Biases configuration")
         wandb.config.update({
             "model": args.model,
@@ -33,13 +32,13 @@ def train_and_eval(args):
             "epochs": args.epochs,
             "data": args.data,
             "batch_size": args.batch_size,
-            "hidden_channels": args.hidden_channels,
+            "hidden_channels": args.hidden_channel,
             "dropout": args.dropout,
             "laplacePE": args.laplacePE,
             "init_nodefeatures_dim": args.init_nodefeatures_dim,
             "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
             "readout": args.readout,
-            "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
+            # "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
         })
 
         # add Git hash to the run
@@ -137,7 +136,7 @@ def train(model, train_loader, val_loader, args, **kwargs):
             if(args.wandb):
                 wandb.log({"train_loss": total_loss / len(train_loader), "train_accuracy": correct / total_samples,
                         "val_loss": val_loss, "val_accuracy": val_accuracy})
-            tqdm.write(f"Validation - Epoch {epoch}, Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.4f}")
+            tqdm.write(f"Validation - Epoch {epoch}, Train Loss:{total_loss}, Train Accuracy: {correct / total_samples}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
 
     # Should move this outside the epoch loop
     if val_loader is not None:
