@@ -22,7 +22,7 @@ def get_default_config():
         "sample_transform": False,
         "init_nodefeatures_dim": 128,
         "init_nodefeatures_strategy": "random",
-        "wandb": True,
+        "wandb": False,
         "learning_rate": 1e-4,
         "scheduler": "None",
         "simon_gaa": False,

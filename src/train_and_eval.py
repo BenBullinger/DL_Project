@@ -137,7 +137,22 @@ def train(model, train_loader, val_loader, args, config=None):
         correct = 0
         total_samples = 0
 
-        for batch in train_loader:
+        # Print first batch predictions
+        for batch_idx, batch in enumerate(train_loader):
+            if batch_idx == 0:  # Only for first batch
+                print("\nFirst 5 samples of training batch:")
+                print(f"Labels:      {batch.y[:20].cpu().numpy()}")
+                
+                batch.to(device)
+                edge_attr = getattr(batch, 'edge_attr', None)
+                output = model(batch.x, batch.edge_index, batch.batch,
+                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
+                
+                predictions = output.argmax(dim=-1)
+                print(f"Predictions: {predictions[:20].cpu().numpy()}")
+                print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
+            
+            # Regular training loop continues...
             batch.to(device)
             optimizer.zero_grad()
 
