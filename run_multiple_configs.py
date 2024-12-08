@@ -20,7 +20,8 @@ def get_default_config():
         "verbose": False,
         "sample_transform": False,
         "init_nodefeatures_dim": 128,
-        "init_nodefeatures_strategy": "random"
+        "init_nodefeatures_strategy": "random",
+        "wandb": False
     }
 
 def run_experiments(config_files):
