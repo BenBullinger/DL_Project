@@ -13,11 +13,6 @@ from src.nn.gamba import Gamba
 import wandb
 import subprocess
 
-wandb.init(
-    project="DL_Project",
-    config={}
-)
-
 @timer
 def train_and_eval(args):
     if args.verbose:
@@ -26,6 +21,10 @@ def train_and_eval(args):
 
 
     if args.wandb:
+        wandb.init(
+            project="DL_Project",
+            config={}
+        )
         print("Loading Weights & Biases configuration")
         wandb.config.update({
             "model": args.model,
@@ -33,13 +32,13 @@ def train_and_eval(args):
             "epochs": args.epochs,
             "data": args.data,
             "batch_size": args.batch_size,
-            "hidden_channels": args.hidden_channels,
+            "hidden_channels": args.hidden_channel,
             "dropout": args.dropout,
             "laplacePE": args.laplacePE,
             "init_nodefeatures_dim": args.init_nodefeatures_dim,
             "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
             "readout": args.readout,
-            "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
+            # "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
         })
 
         # add Git hash to the run
