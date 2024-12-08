@@ -99,12 +99,11 @@ def train_and_eval(args):
 
 def train(model, train_loader, val_loader, args, **kwargs):
     device = args.device
-    # Set up optimizer and loss function
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     loss_fn = torch.nn.CrossEntropyLoss()
-    # Training loop
-    model.train()
+    
     for epoch in tqdm(range(0, args.epochs+1), desc="Training", unit="epoch"):
+        model.train()
         total_loss = 0
         correct = 0
         total_samples = 0
@@ -113,33 +112,37 @@ def train(model, train_loader, val_loader, args, **kwargs):
             batch.to(device)
             optimizer.zero_grad()
 
-            # Get edge_attr from batch if it exists, otherwise None
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch, 
                           edge_attr=edge_attr, laplacePE=batch.laplacePE)
             
-            # Compute loss
+            if output.dim() == 1:
+                output = output.unsqueeze(0)
+            
             loss = loss_fn(output, batch.y)
             loss.backward()
             optimizer.step()
 
-            # Calculate accuracy
-            predictions = output.argmax(dim=1)
+            predictions = output.argmax(dim=-1)
             correct += (predictions == batch.y).sum().item()
             total_samples += batch.y.size(0)
-
             total_loss += loss.item()
 
+        avg_loss = total_loss / len(train_loader)
+        avg_accuracy = correct / total_samples
 
-        # Display validation metrics
         if not epoch % 20 and val_loader is not None:
             val_loss, val_accuracy = evaluate(model, val_loader, args)
-            if(args.wandb):
-                wandb.log({"train_loss": total_loss / len(train_loader), "train_accuracy": correct / total_samples,
-                        "val_loss": val_loss, "val_accuracy": val_accuracy})
-            tqdm.write(f"Validation - Epoch {epoch}, Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.4f}")
+            if args.wandb:
+                wandb.log({
+                    "train_loss": avg_loss, 
+                    "train_accuracy": avg_accuracy,
+                    "val_loss": val_loss, 
+                    "val_accuracy": val_accuracy,
+                    "epoch": epoch
+                })
+            tqdm.write(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}, Train Acc: {avg_accuracy:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
 
-    # Should move this outside the epoch loop
     if val_loader is not None:
         return evaluate(model, val_loader, args)
 
@@ -152,25 +155,23 @@ def evaluate(model, val_loader, args):
 
     with torch.no_grad():
         for batch in val_loader:
-            # Move batch to the device
             batch.to(args.device)
             
-            # Get edge_attr from batch if it exists, otherwise None
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
                           edge_attr=edge_attr, laplacePE=batch.laplacePE)
             
-            # Compute loss
+            if output.dim() == 1:
+                output = output.unsqueeze(0)
+            
             loss = loss_fn(output, batch.y)
             total_loss += loss.item()
 
-            # Calculate accuracy
-            predictions = output.argmax(dim=1)
+            predictions = output.argmax(dim=-1)
             correct += (predictions == batch.y).sum().item()
             total_samples += batch.y.size(0)
 
-    # Calculate average loss and accuracy
     avg_loss = total_loss / len(val_loader)
     accuracy = correct / total_samples
-    model.train()  # Switch back to training mode
+    
     return avg_loss, accuracy
