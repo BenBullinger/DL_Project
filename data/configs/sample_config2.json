@@ -3,11 +3,12 @@
     "model":"gamba",
     "readout": "add",
     "data":"PROTEINS",
-    "epochs":10,
+    "epochs":20,
     "batch_size":32,
-    "laplacePE":3,
+    "laplacePE":0,
     "hidden_channel":64,
-    "dropout":0.5,
+    "learning_rate":0.00001,
+    "dropout":0.0,
     "seed":0,
     "verbose": false
 }

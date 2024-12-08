@@ -1,15 +1,28 @@
 import torch
 import torch.nn as nn
+from torch_scatter import scatter_mean
 from torch_geometric.nn import GINConv
 from transformers import MambaConfig, MambaModel
 
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
 
+class TokenAggregator(nn.Module):
+    """Aggregate graph information into a fixed set of tokens."""
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, batch=None):
+        if batch is not None:
+            return scatter_mean(x, batch, dim=0)
+        else:
+            return x.mean(dim=1)
+
 class GraphAttentionAggregator(nn.Module):
     """Aggregates graph information into a fixed number of nodes using transformer attention"""
-    def __init__(self, hidden_channels, num_virtual_tokens, num_attention_heads=4):
+    def __init__(self, hidden_channels, num_virtual_tokens, args=None, num_attention_heads=4):
         super().__init__()
         self.num_virtual_tokens = num_virtual_tokens
+        self.aggr = TokenAggregator()
         
         # Virtual tokens that will learn to attend to the graph
         self.virtual_tokens = nn.Parameter(torch.randn(num_virtual_tokens, hidden_channels))
@@ -22,24 +35,27 @@ class GraphAttentionAggregator(nn.Module):
         )
         
     def forward(self, x, batch):
-        # Expand virtual tokens for batch size
         batch_size = torch.max(batch) + 1
-        virtual_tokens = self.virtual_tokens.unsqueeze(0).expand(batch_size, -1, -1)
+
+        virtual_tokens = self.virtual_tokens.unsqueeze(0).expand(batch_size, -1, -1).clone()
+        #virtual_tokens.shape = [batch, num_virtual_tokens, hidden_channel]
+        aggregated_tokens = self.aggr(x, batch)
+        aggregated_tokens = aggregated_tokens.unsqueeze(1) # [batch_size, channels]
         
-        # Reshape x to [batch_size, num_nodes_per_graph, channels]
         x_batched = torch.zeros(batch_size, max(batch.bincount()), x.size(-1), device=x.device)
-        for i in range(batch_size):
-            batch_mask = batch == i
-            x_batched[i, :batch_mask.sum()] = x[batch_mask]
+        #input(f"Virtual tokens at start:\n{virtual_tokens[0,:,:]}")
+        for i in range(self.virtual_tokens.size(0)):
+            query = aggregated_tokens
+            out, _ = self.attention(
+                query=query,
+                key=x_batched,
+                value=x_batched
+            )
+            aggregated_tokens = self.aggr(torch.cat((virtual_tokens[:,0:i,:], out), dim=1)).unsqueeze(1)
+            virtual_tokens[:,i,:] = aggregated_tokens.squeeze(1)
+            #input(f"Virtual tokens after iteration {i}:\n{virtual_tokens[0,:,:]}")
         
-        # Apply attention
-        out, _ = self.attention(
-            query=virtual_tokens,
-            key=x_batched,
-            value=x_batched
-        )
-        
-        return out  # [batch_size, num_virtual_tokens, channels]
+        return virtual_tokens  # [batch_size, num_virtual_tokens, channels]
 
 class Gamba(nn.Module):
     def __init__(
@@ -55,7 +71,8 @@ class Gamba(nn.Module):
         use_dec=True,
         use_readout="add",
         num_virtual_tokens=4,
-        num_attention_heads=4
+        num_attention_heads=4,
+        args=None
     ):
         super().__init__()
         

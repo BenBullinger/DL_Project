@@ -1,3 +1,4 @@
+import numpy as np
 import json
 import torch
 from tqdm import tqdm
@@ -22,32 +23,13 @@ def train_and_eval(args):
         print("Running with the following arguments:")
         print(json.dumps(args.__dict__, indent=2))
 
-
     if args.wandb:
-        wandb.init(
-            project="DL_Project",
-            config={}
-        )
-        print("Loading Weights & Biases configuration")
-        wandb.config.update({
-            "model": args.model,
-            "seed": args.seed,
-            "epochs": args.epochs,
-            "data": args.data,
-            "batch_size": args.batch_size,
-            "hidden_channels": args.hidden_channel,
-            "dropout": args.dropout,
-            "laplacePE": args.laplacePE,
-            "init_nodefeatures_dim": args.init_nodefeatures_dim,
-            "init_nodefeatures_strategy": args.init_nodefeatures_strategy,
-            "readout": args.readout,
-            # "ignore_GNNBenchmark_original_split": args.ignore_GNNBenchmark_original_split,
-        })
-
+        wandb.config.update(args.__dict__, allow_val_change=True)
+        
         # add Git hash to the run
         try:
             git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-            wandb.config.git_hash = git_hash
+            wandb.config.update({"git_hash": git_hash}, allow_val_change=True)
             print(f"Logged Git hash: {git_hash}")
         except subprocess.CalledProcessError as e:
             print("Error retrieving Git hash. Make sure you are in a Git repository.", e)
@@ -153,11 +135,13 @@ def train(model, train_loader, val_loader, args, config=None):
             optimizer.zero_grad()
 
             edge_attr = getattr(batch, 'edge_attr', None)
-            output = model(batch.x, batch.edge_index, batch.batch, 
-                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
+            output = model(batch.x, batch.edge_index, batch.batch,
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE) )
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)
+
+            
             
             loss = loss_fn(output, batch.y)
             loss.backward()
@@ -219,7 +203,7 @@ def evaluate(model, val_loader, args):
             
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
-                          edge_attr=edge_attr, laplacePE=batch.laplacePE)
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE) )
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)
