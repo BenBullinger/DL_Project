@@ -34,8 +34,8 @@ def run_experiments(config_files):
     results = []
 
     # Initialize wandb once before the loop
-    # if get_default_config()["wandb"]:
-    #     wandb.init(project="DL_Project", config={})
+    if get_default_config()["wandb"]:
+        wandb.init(project="DL_Project", config={})
 
     for config_file in config_files:
         # Load the configuration
@@ -48,7 +48,7 @@ def run_experiments(config_files):
 
         # Convert config to argparse.Namespace
         args = argparse.Namespace(**full_config)
-        
+
         # Run training and evaluation
         val_loss, val_accuracy = train_and_eval(args)
 

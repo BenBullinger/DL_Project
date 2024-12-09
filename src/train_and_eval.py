@@ -40,16 +40,7 @@ def train_and_eval(args):
         print(json.dumps(args.__dict__, indent=2))
 
     if args.wandb:
-        if(hasattr(args, "name")):
-            naming = args.name
-        else:
-            naming = f"{args.model}_{args.data}"
-
-        wandb.init(
-            project="DL_Project",
-            config=args.__dict__,
-            name=naming
-        )
+        wandb.config.update(args.__dict__, allow_val_change=True)
         
         # add Git hash to the run
         try:
@@ -225,7 +216,7 @@ def train(model, train_loader, val_loader, args, config=None):
                     train_loss=avg_loss,
                     epoch=epoch
                 )
-    wandb.finish()
+
     if val_loader is not None:
         return evaluate(model, val_loader, args)
 
