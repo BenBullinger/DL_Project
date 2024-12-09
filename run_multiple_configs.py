@@ -1,7 +1,7 @@
 import json
 import os
 import argparse
-from src.train_and_eval import train_and_eval
+from train_and_eval import train_and_eval
 from src.utils.config import command_line_parser
 import pandas as pd
 import wandb

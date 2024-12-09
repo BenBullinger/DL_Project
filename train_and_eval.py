@@ -5,12 +5,12 @@ from tqdm import tqdm
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
 import torch.nn.functional as F
-from nn.gin import GIN
-from nn.graph_transformer import GraphTransformerNet
-from utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
-from utils.dataset import load_data
-from utils.misc import seed_everything, timer
-from nn.gamba import Gamba
+from src.nn.gin import GIN
+from src.nn.graph_transformer import GraphTransformerNet
+from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
+from src.utils.dataset import load_data
+from src.utils.misc import seed_everything, timer
+from src.nn.gamba import Gamba
 import wandb
 import subprocess
 from ray import tune
@@ -309,6 +309,10 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
     parser.add_argument("--optimize_hyperparams", action="store_true", help="Run hyperparameter optimization")
+    parser.add_argument("--num_virtual_tokens", type=int, default=10, help="Number of virtual tokens for Gamba model")
+    parser.add_argument("--scheduler", type=str, default="None", choices=["None", "Plateau"],
+                       help="Learning rate scheduler (None or Plateau)")
+    parser.add_argument("--simon_gaa", action="store_true", help="Use Simon GAA attention mechanism")
 
     args = parser.parse_args()
     main(args)
