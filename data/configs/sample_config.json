@@ -10,5 +10,5 @@
     "dropout":0,
     "seed":0,
     "verbose": false,
-    "wandb": true
+    "wandb": false
 }
