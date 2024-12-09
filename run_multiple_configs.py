@@ -16,7 +16,7 @@ def get_default_config():
         "batch_size":32,
         "laplacePE":3,
         "hidden_channel":64,
-        "dropout":0.5,
+        "dropout":0.2,
         "seed":0,
         "verbose": False,
         "sample_transform": False,
@@ -27,6 +27,8 @@ def get_default_config():
         "scheduler": "None",
         "simon_gaa": False,
         "num_virtual_tokens": 4,
+        "token_aggregation": "mean",
+        "use_mamba": True,
         "patience": 20
     }
 
@@ -58,7 +60,7 @@ def run_experiments(config_files):
 
         # Collect results
         results.append({
-            "Model": config["model"],
+            "Model": config["name"],
             "Loss": f"{val_loss:.4f}",
             "Accuracy": f"{val_accuracy:.4f}"
         })
@@ -75,8 +77,9 @@ def run_experiments(config_files):
 if __name__ == "__main__":
     # List of configuration files
     config_files = [
-        "data/configs/sample_config.json",
+        #"data/configs/sample_config.json",
         #"data/configs/sample_config2.json",
+        "data/configs/sample_config3.json"
         # Add more config files as needed
     ]
 

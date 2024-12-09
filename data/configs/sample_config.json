@@ -10,9 +10,10 @@
     "learning_rate": 4e-4,
     "num_virtual_tokens": 10,
     "scheduler": "Plateau",
-    "dropout":0.1,
+    "dropout":0,
     "seed":0,
     "verbose": false,
-    "simon_gaa": false,
-    "wand":false
+    "simon_gaa": true,
+    "wandb": false,
+    "name": "gamba-simon"
 }

@@ -46,7 +46,7 @@ def train_and_eval(args):
         # add Git hash to the run
         try:
             git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-            wandb.config.update({"git_hash": git_hash}, allow_val_change=True)
+            wandb.config.update(args.__dict__, allow_val_change=True)
             print(f"Logged Git hash: {git_hash}")
         except subprocess.CalledProcessError as e:
             print("Error retrieving Git hash. Make sure you are in a Git repository.", e)
@@ -138,7 +138,7 @@ def train(model, train_loader, val_loader, args, config=None):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     scheduler_dict =  {
         'None': torch.optim.lr_scheduler.LambdaLR(optimizer, (lambda x : 1), last_epoch=- 1, verbose=False),
-        'Plateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',factor=0.7, patience=12, threshold=0.1, threshold_mode='rel', min_lr=0.00001),
+        'Plateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',factor=0.8, patience=12, threshold=0.1, threshold_mode='rel', min_lr=1e-6),
     }
     scheduler = scheduler_dict[args.scheduler]
 
@@ -232,8 +232,8 @@ def evaluate(model, val_loader, args):
         for batch_idx, batch in enumerate(val_loader):
             # Print first batch predictions
             if batch_idx == 0:  # Only for first batch
-                print("\nFirst 20 samples of validation batch:")
-                print(f"Labels:      {batch.y[:20].cpu().numpy()}")
+                #print("\nFirst 20 samples of validation batch:")
+                #print(f"Labels:      {batch.y[:20].cpu().numpy()}")
                 
                 batch.to(args.device)
                 edge_attr = getattr(batch, 'edge_attr', None)
@@ -241,8 +241,8 @@ def evaluate(model, val_loader, args):
                              edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
                 
                 predictions = output.argmax(dim=-1)
-                print(f"Predictions: {predictions[:20].cpu().numpy()}")
-                print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
+                #print(f"Predictions: {predictions[:20].cpu().numpy()}")
+                #print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
             
             batch.to(args.device)
             edge_attr = getattr(batch, 'edge_attr', None)

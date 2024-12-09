@@ -4,18 +4,35 @@ from torch_scatter import scatter_mean
 from torch_geometric.nn import GINConv
 from transformers import MambaConfig, MambaModel
 
+from .mlp import get_mlp
+
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
 
 class TokenAggregator(nn.Module):
     """Aggregate graph information into a fixed set of tokens."""
-    def __init__(self):
+    def __init__(self, hidden_channels, strategy="mean"):
         super().__init__()
-
+        self.strategy = strategy
+        if strategy == "gru":
+            self.rnn = nn.GRU(hidden_channels, hidden_channels, batch_first=True)
+        
     def forward(self, x, batch=None):
-        if batch is not None:
-            return scatter_mean(x, batch, dim=0)
-        else:
-            return x.mean(dim=1)
+        
+        if self.strategy == "mean":
+            if batch is not None:
+                return scatter_mean(x, batch, dim=0)
+            else:
+                #input(x.mean(dim=1).shape)
+                return x.mean(dim=1)
+            
+        if self.strategy == "gru":
+            if batch is not None:
+                return scatter_mean(x, batch, dim=0)
+            else:
+                batch_size = x.shape[0]
+                out, hidden_state = self.rnn(x)
+                hidden_state = hidden_state.permute(1, 0, 2).reshape(batch_size, -1) 
+                return hidden_state.squeeze(1)
 
 class GraphAttentionAggregator(nn.Module):
     """Aggregates graph information into a fixed number of nodes using transformer attention"""
@@ -23,7 +40,7 @@ class GraphAttentionAggregator(nn.Module):
         super().__init__()
         self.num_virtual_tokens = num_virtual_tokens
         self.args = args
-        self.aggr = TokenAggregator()
+        self.aggr = TokenAggregator(hidden_channels, strategy=args.token_aggregation)
         
         # Virtual tokens that will learn to attend to the graph
         self.virtual_tokens = nn.Parameter(torch.randn(num_virtual_tokens, hidden_channels))
@@ -56,6 +73,7 @@ class GraphAttentionAggregator(nn.Module):
          
         for i in range(self.virtual_tokens.size(0)):
             query = aggregated_tokens
+            
             out, _ = self.attention(
                 query=query,
                 key=x_batched,
@@ -87,9 +105,12 @@ class Gamba(nn.Module):
         super().__init__()
         
         self.num_layers = layers
-        
+        self.args = args
         # Initial GIN layer
-        self.input_gin = GINConv(nn.Linear(in_channels, hidden_channels))
+        if use_enc:
+            self.enc = get_mlp(input_dim=in_channels, hidden_dim=hidden_channels, mlp_depth=mlp_depth, output_dim=hidden_channels, normalization=torch.nn.LayerNorm, last_relu=False)
+        first_gin_dim = hidden_channels if use_enc else in_channels
+        self.input_gin = GINConv(nn.Linear(first_gin_dim, hidden_channels), train_eps=True)
         
         # Configure Mamba
         self.mamba_config = MambaConfig(
@@ -114,7 +135,10 @@ class Gamba(nn.Module):
             self.layers.append(layer)
             
         # Output layers
-        self.output_gin = GINConv(nn.Linear(hidden_channels, out_channels))
+        last_gin_dim = hidden_channels if use_dec else out_channels
+        self.output_gin = GINConv(nn.Linear(hidden_channels, last_gin_dim))
+        if use_dec:
+            self.dec = get_mlp(input_dim=hidden_channels, hidden_dim=hidden_channels, mlp_depth=mlp_depth, output_dim=out_channels, normalization=torch.nn.LayerNorm, last_relu=False)
         
         # Add readout if specified
         self.readout = None
@@ -126,6 +150,8 @@ class Gamba(nn.Module):
         self.layer_norm = nn.LayerNorm(hidden_channels)
         
     def forward(self, x, edge_index, batch, **kwargs):
+        if self.enc is not None:
+            x = self.enc(x)
         x = self.input_gin(x, edge_index)
         
         for layer in self.layers:
@@ -134,7 +160,10 @@ class Gamba(nn.Module):
             
             # Global information processing
             global_tokens = layer['attention'](x, batch)
-            global_features = self.mamba(inputs_embeds=global_tokens).last_hidden_state
+            if self.args.use_mamba:
+                global_features = self.mamba(inputs_embeds=global_tokens).last_hidden_state
+            else:
+                raise NotImplementedError("For now you have to use mamba")
             global_update = global_features.mean(dim=1)
             
             # Normalized feature combination
@@ -145,5 +174,8 @@ class Gamba(nn.Module):
         # Apply readout if specified
         if self.readout is not None:
             x = self.readout(x, batch)
+
+        if self.dec is not None:
+            x = self.dec(x)
         
         return x

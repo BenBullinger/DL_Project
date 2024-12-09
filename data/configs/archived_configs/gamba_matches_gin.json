@@ -15,5 +15,5 @@
     "verbose": false,
     "simon_gaa": false,
     "wandb": false,
-    "name": "gamba-mean"
+    "name": "gamba_matching_gin"
 }
