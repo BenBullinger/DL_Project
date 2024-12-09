@@ -24,7 +24,11 @@ def command_line_parser():
     parser.add_argument('--init_nodefeatures_dim', type=int, default=8, help="Dimension of initialized node features. (If the dataset has none)")
     parser.add_argument('--init_nodefeatures_strategy', type=str, default="ones", choices=["random", "zeros", "ones"], help="Strategy to initialize node features (if the dataset has none): 'random' values, all 'zeros', or all 'ones'.")
     parser.add_argument('--sample_transform', action='store_true', help="If passed, adds the sample transform to check the preprocess example.")
-    
+    parser.add_argument("--optimize_hyperparams", action="store_true", help="Run hyperparameter optimization")
+    parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
+    parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
+
+
     args = parser.parse_args()
 
     if args.config is not None:

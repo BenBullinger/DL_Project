@@ -1,14 +1,16 @@
 {
-    "device": "cpu",
+    "device": 0,
     "model":"gamba",
     "readout": "add",
     "data":"PROTEINS",
-    "epochs":100,
+    "epochs":200,
     "batch_size":32,
     "laplacePE":0,
-    "hidden_channel":64,
-    "dropout":0,
+    "hidden_channel":128,
+    "learning_rate": 4e-4,
+    "scheduler": "Plateau",
+    "dropout":0.1,
     "seed":0,
     "verbose": false,
-    "wandb": true
+    "wand":false
 }
