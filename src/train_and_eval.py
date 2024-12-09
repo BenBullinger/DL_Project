@@ -1,19 +1,11 @@
-import sys
 import os
+import sys
 
 # Add project root to Python path when running directly
 if __name__ == "__main__":
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     sys.path.insert(0, project_root)
 
-# Rest of imports
-import torch
-import json
-import wandb
-from tqdm import tqdm
-import numpy as np
-from src.utils.misc import timer
-from src.utils.dataset import load_data
 import numpy as np
 import json
 import torch
@@ -21,7 +13,7 @@ from tqdm import tqdm
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
 import torch.nn.functional as F
-from src.nn.gin import GIN
+from nn.gin import GIN
 from src.nn.graph_transformer import GraphTransformerNet
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
@@ -40,7 +32,16 @@ def train_and_eval(args):
         print(json.dumps(args.__dict__, indent=2))
 
     if args.wandb:
-        wandb.config.update(args.__dict__, allow_val_change=True)
+        if(hasattr(args, "name")):
+            naming = args.name
+        else:
+            naming = f"{args.model}_{args.data}"
+
+        wandb.init(
+            project="DL_Project",
+            config=args.__dict__,
+            name=naming
+        )
         
         # add Git hash to the run
         try:
@@ -216,7 +217,7 @@ def train(model, train_loader, val_loader, args, config=None):
                     train_loss=avg_loss,
                     epoch=epoch
                 )
-
+    wandb.finish()
     if val_loader is not None:
         return evaluate(model, val_loader, args)
 
