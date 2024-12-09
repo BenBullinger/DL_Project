@@ -5,12 +5,12 @@ from tqdm import tqdm
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
 import torch.nn.functional as F
-from src.nn.gin import GIN
-from src.nn.graph_transformer import GraphTransformerNet
-from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
-from src.utils.dataset import load_data
-from src.utils.misc import seed_everything, timer
-from src.nn.gamba import Gamba
+from nn.gin import GIN
+from nn.graph_transformer import GraphTransformerNet
+from utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
+from utils.dataset import load_data
+from utils.misc import seed_everything, timer
+from nn.gamba import Gamba
 import wandb
 import subprocess
 from ray import tune
@@ -137,22 +137,7 @@ def train(model, train_loader, val_loader, args, config=None):
         correct = 0
         total_samples = 0
 
-        # Print first batch predictions
-        for batch_idx, batch in enumerate(train_loader):
-            if batch_idx == 0:  # Only for first batch
-                print("\nFirst 5 samples of training batch:")
-                print(f"Labels:      {batch.y[:20].cpu().numpy()}")
-                
-                batch.to(device)
-                edge_attr = getattr(batch, 'edge_attr', None)
-                output = model(batch.x, batch.edge_index, batch.batch,
-                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
-                
-                predictions = output.argmax(dim=-1)
-                print(f"Predictions: {predictions[:20].cpu().numpy()}")
-                print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
-            
-            # Regular training loop continues...
+        for batch in train_loader:
             batch.to(device)
             optimizer.zero_grad()
 
@@ -163,8 +148,6 @@ def train(model, train_loader, val_loader, args, config=None):
             if output.dim() == 1:
                 output = output.unsqueeze(0)
 
-            
-            
             loss = loss_fn(output, batch.y)
             loss.backward()
             optimizer.step()
@@ -229,12 +212,25 @@ def evaluate(model, val_loader, args):
     loss_fn = torch.nn.CrossEntropyLoss()
 
     with torch.no_grad():
-        for batch in val_loader:
-            batch.to(args.device)
+        for batch_idx, batch in enumerate(val_loader):
+            # Print first batch predictions
+            if batch_idx == 0:  # Only for first batch
+                print("\nFirst 20 samples of validation batch:")
+                print(f"Labels:      {batch.y[:20].cpu().numpy()}")
+                
+                batch.to(args.device)
+                edge_attr = getattr(batch, 'edge_attr', None)
+                output = model(batch.x, batch.edge_index, batch.batch,
+                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
+                
+                predictions = output.argmax(dim=-1)
+                print(f"Predictions: {predictions[:20].cpu().numpy()}")
+                print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
             
+            batch.to(args.device)
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
-                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE) )
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)
@@ -291,12 +287,28 @@ def main(args):
         train_and_eval(args)
 
 if __name__ == "__main__":
-    # Only execute if run directly, not when imported
     import argparse
     parser = argparse.ArgumentParser()
-    # Add your arguments here
-    parser.add_argument("--optimize_hyperparams", action="store_true", help="Run hyperparameter optimization")
-    parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
+    
+    # Add all arguments with their default values
+    parser.add_argument("--device", type=str, default="cpu", help="Device to run on")
+    parser.add_argument("--model", type=str, default="gamba", help="Model type (gamba/gin/gt)")
+    parser.add_argument("--readout", type=str, default="add", help="Readout function")
+    parser.add_argument("--data", type=str, default="PROTEINS", help="Dataset name")
+    parser.add_argument("--epochs", type=int, default=10, help="Number of epochs")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--laplacePE", type=int, default=3, help="Laplacian PE dimension")
+    parser.add_argument("--hidden_channel", type=int, default=64, help="Hidden channel dimension")
+    parser.add_argument("--dropout", type=float, default=0.5, help="Dropout rate")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--sample_transform", action="store_true", help="Use sample transform")
+    parser.add_argument("--init_nodefeatures_dim", type=int, default=128, help="Initial node features dimension")
+    parser.add_argument("--init_nodefeatures_strategy", type=str, default="random", help="Strategy for initial node features")
+    parser.add_argument("--wandb", action="store_true", help="Use Weights & Biases logging")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
+    parser.add_argument("--optimize_hyperparams", action="store_true", help="Run hyperparameter optimization")
+
     args = parser.parse_args()
     main(args)

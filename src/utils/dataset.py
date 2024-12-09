@@ -4,7 +4,7 @@ Loads the datasets.
 import torch
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
-from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
+from utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 
 def load_data(args):
     task_description = {}
