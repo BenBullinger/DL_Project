@@ -5,6 +5,17 @@ import torch
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
+import os
+from pathlib import Path
+
+def get_project_root():
+    """Get the project root directory from any file in the project"""
+    # Start from the current file's directory
+    current_dir = Path(__file__).resolve().parent
+    # Go up until we find the project root (where data/ exists)
+    while current_dir.name != "DL_Project" and current_dir.parent != current_dir:
+        current_dir = current_dir.parent
+    return current_dir
 
 def load_data(args):
     task_description = {}
@@ -18,9 +29,15 @@ def load_data(args):
     return train_loader, val_loader, test_loader, info
 
 def GNNBenchmarkLoader(args, dataset_name):
-    train_dataset = GNNBenchmarkDataset(root="data/GNNBenchmarkDataset", name=dataset_name, split="train", pre_transform=preprocess_dataset(args))
-    val_dataset = GNNBenchmarkDataset(root="data/GNNBenchmarkDataset", name=dataset_name, split="val" , pre_transform=preprocess_dataset(args))
-    test_dataset = GNNBenchmarkDataset(root="data/GNNBenchmarkDataset", name=dataset_name, split="test" , pre_transform=preprocess_dataset(args))
+    data_dir = os.path.join(get_project_root(), "data", "GNNBenchmarkDataset")
+    train_dataset = GNNBenchmarkDataset(
+        root=data_dir,
+        name=dataset_name, 
+        split="train", 
+        pre_transform=preprocess_dataset(args)
+    )
+    val_dataset = GNNBenchmarkDataset(root=data_dir, name=dataset_name, split="val" , pre_transform=preprocess_dataset(args))
+    test_dataset = GNNBenchmarkDataset(root=data_dir, name=dataset_name, split="test" , pre_transform=preprocess_dataset(args))
     
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
@@ -32,7 +49,13 @@ def GNNBenchmarkLoader(args, dataset_name):
 def TUDatasetLoader(args, dataset_name):
     if dataset_name in ["REDDIT", "IMDB"]:
         dataset_name += "-BINARY"
-    dataset = TUDataset(root="data/TUDataset", name=dataset_name, use_node_attr=True)
+    
+    data_dir = os.path.join(get_project_root(), "data", "TUDataset")
+    dataset = TUDataset(
+        root=data_dir,
+        name=dataset_name, 
+        use_node_attr=True
+    )
     datalist_prepocessed = explicit_preprocess(datalist=list(dataset), transform=preprocess_dataset(args))
     train_dataset, val_dataset, test_dataset = fix_splits(dataset=datalist_prepocessed, ratio=(0.8,0.1,0.1), shuffle=True)
     
