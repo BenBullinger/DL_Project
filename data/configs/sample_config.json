@@ -1,5 +1,5 @@
 {
-    "device": 0,
+    "device": "cpu",
     "model":"gamba",
     "readout": "add",
     "data":"PROTEINS",
@@ -14,5 +14,5 @@
     "seed":0,
     "verbose": false,
     "simon_gaa": false,
-    "wand":false
+    "wandb":true
 }

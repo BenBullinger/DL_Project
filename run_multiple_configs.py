@@ -34,8 +34,8 @@ def run_experiments(config_files):
     results = []
 
     # Initialize wandb once before the loop
-    if get_default_config()["wandb"]:
-        wandb.init(project="DL_Project", config={})
+    # if get_default_config()["wandb"]:
+    #     wandb.init(project="DL_Project", config={})
 
     for config_file in config_files:
         # Load the configuration
