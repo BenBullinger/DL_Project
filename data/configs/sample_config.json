@@ -1,11 +1,11 @@
 {
-    "device": 0,
+    "device": "cpu",
     "model":"gamba",
     "readout": "add",
     "data":"PROTEINS",
     "epochs":200,
     "batch_size":32,
-    "laplacePE":2,
+    "laplacePE":0,
     "hidden_channel":64,
     "learning_rate": 4e-4,
     "num_virtual_tokens": 10,
@@ -14,5 +14,5 @@
     "seed":0,
     "verbose": false,
     "simon_gaa": false,
-    "wand":false
+    "wandb":true
 }
