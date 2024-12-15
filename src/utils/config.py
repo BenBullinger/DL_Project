@@ -12,7 +12,7 @@ def command_line_parser():
     parser.add_argument('-device', type=int, default=0, help="Assign GPU slot to the task (use -1 for cpu)")
     parser.add_argument('-v-','--verbose', action='store_true', help="If passed, enables verbose output.")
     parser.add_argument('--seed', type=int, default=0, help="sets the seed")
-    parser.add_argument('--model', type=str.lower, default='gin', choices=["gin", "gt"], help="Selects the model.")
+    parser.add_argument('--model', type=str.lower, default='gin', choices=["gin", "gt", "gamba"], help="Selects the model.")
     parser.add_argument('--readout', type=str.lower, default='gin', choices=["add", "min", "max"], help="Selects the aggregation method for graph readout. Ignored for node-prediction task")
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size")
     parser.add_argument('--hidden_channels', type=int, default=16, help="Dimension of the hidden representaion")

@@ -9,6 +9,5 @@
     "hidden_channel":64,
     "dropout":0,
     "seed":0,
-    "optimize_hyperparams": true,
     "verbose": false
 }

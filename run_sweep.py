@@ -27,10 +27,12 @@ def run_sweep(sweep_config_path: str, count: int = 50):
     with open(sweep_config_path, 'r') as f:
         sweep_config = yaml.safe_load(f)
     
+    # Initialize the project
+    wandb.init(project="DL_Project")
+    
     # Initialize the sweep
     sweep_id = wandb.sweep(
         sweep=sweep_config,
-        project="DL_Project"
     )
     
     # Start the sweep agent

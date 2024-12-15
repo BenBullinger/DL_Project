@@ -12,7 +12,9 @@ parameters:
   num_virtual_tokens:
     values: [1, 2, 5, 10, 20]
   hidden_channel:
-    values: [32, 64, 96, 128, 256]
+    distribution: int_uniform
+    min: 32
+    max: 256
   dropout:
     distribution: uniform
     min: 0.0
@@ -36,6 +38,17 @@ parameters:
   device:
     value: "cpu"  # Change to cuda device number if using GPU
 
+# Bayesian optimization specific settings
+controller:
+  type: bayes
+  metric: val_accuracy
+  goal: maximize
+  params:
+    bayes_samples: 10  # Number of samples to use for Bayesian optimization initialization
+    exploration_factor: 0.1  # Controls exploration vs exploitation trade-off
+
 early_terminate:
   type: hyperband
-  min_iter: 20 
+  min_iter: 20
+  eta: 3  # Reduction factor for hyperband
+  max_iter: 100  # Maximum iterations per configuration
