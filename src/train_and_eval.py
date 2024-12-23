@@ -13,7 +13,8 @@ from tqdm import tqdm
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
 import torch.nn.functional as F
-from nn.gin import GIN
+from src.nn.gin import GIN
+from src.nn.gat_super import GATSuper
 from src.nn.graph_transformer import GraphTransformerNet
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
@@ -71,6 +72,19 @@ def train_and_eval(args):
             use_dec=True,
             use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
+    elif args.model == "gat":
+        model = GATSuper(
+            in_channels=task_info["node_feature_dims"],
+            hidden_channels=args.hidden_channel,
+            layers=2,
+            out_channels=task_info["output_dims"],
+            heads=args.heads,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+        ).to(device)    
     elif args.model == "gt":
         model = GraphTransformerNet(
             node_dim_in=task_info["node_feature_dims"],

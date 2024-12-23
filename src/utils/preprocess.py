@@ -35,11 +35,13 @@ def preprocess_dataset(config):
     if config.sample_transform:
         transforms.append(SampleTransform())
     transforms.append(InitEmptyNodeFeatures(dimension=config.init_nodefeatures_dim, strategy=config.init_nodefeatures_strategy))
+    if config.add_virtual_node:
+        transforms.append(T.VirtualNode())
     if config.laplacePE > 0:
         transforms.append(T.AddLaplacianEigenvectorPE(k=config.laplacePE, attr_name="laplacePE"))
         if config.model == "gin":
             transforms.append(ConcatToNodeFeatures(attr_name="laplacePE"))
-    
+
     return T.Compose(transforms)
 
 class SampleTransform(BaseTransform):

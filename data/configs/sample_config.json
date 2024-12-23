@@ -1,6 +1,6 @@
 {
     "device": 0,
-    "model":"gamba",
+    "model":"gat",
     "readout": "add",
     "data":"PROTEINS",
     "epochs":200,
@@ -9,11 +9,13 @@
     "hidden_channel":64,
     "learning_rate": 4e-4,
     "num_virtual_tokens": 10,
+    "add_virtual_node":false,
     "scheduler": "Plateau",
     "dropout":0,
     "seed":0,
+    "heads":1,
     "verbose": false,
     "simon_gaa": true,
     "wandb": false,
-    "name": "gamba-simon"
+    "name": "simple-gat"
 }

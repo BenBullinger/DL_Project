@@ -16,10 +16,12 @@ def get_default_config():
         "batch_size":32,
         "laplacePE":3,
         "hidden_channel":64,
+        "heads":4,
         "dropout":0.2,
         "seed":0,
         "verbose": False,
         "sample_transform": False,
+        "add_virtual_node":True,
         "init_nodefeatures_dim": 128,
         "init_nodefeatures_strategy": "random",
         "wandb": False,
@@ -40,7 +42,7 @@ def run_experiments(config_files):
         wandb.init(
             project="DL_Project",
             config=args.__dict__,
-            name=naming
+            name=args.name
         )
 
     for config_file in config_files:
@@ -77,9 +79,9 @@ def run_experiments(config_files):
 if __name__ == "__main__":
     # List of configuration files
     config_files = [
-        #"data/configs/sample_config.json",
-        #"data/configs/sample_config2.json",
-        "data/configs/sample_config3.json"
+        "data/configs/sample_config.json",
+        "data/configs/sample_config2.json",
+        #"data/configs/sample_config3.json"
         # Add more config files as needed
     ]
 

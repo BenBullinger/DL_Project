@@ -24,8 +24,10 @@ def load_data(args):
     dataset_name = args.data.upper()
     if dataset_name in ["CIFAR10", "MNIST", "CLUSTER", "PATTERN", "TSP"]:
         train_loader, val_loader, test_loader, info = GNNBenchmarkLoader(args, dataset_name)
-    if dataset_name in ["MUTAG", "ENZYMES", "PROTEINS", "COLLAB", "IMDB", "REDDIT"]:
+    elif dataset_name in ["MUTAG", "ENZYMES", "PROTEINS", "COLLAB", "IMDB", "REDDIT"]:
         train_loader, val_loader, test_loader, info = TUDatasetLoader(args, dataset_name)
+    else:
+        raise ValueError(f"Dataset called {dataset_name} was not found. Check out the available dataset options once we enable that")
     return train_loader, val_loader, test_loader, info
 
 def GNNBenchmarkLoader(args, dataset_name):
