@@ -16,10 +16,11 @@ import torch.nn.functional as F
 from src.nn.gin import GIN
 from src.nn.gat_super import GATSuper
 from src.nn.graph_transformer import GraphTransformerNet
+from src.nn.gamba_simple import Gamba
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
-from src.nn.gamba import Gamba
+#from src.nn.gamba import Gamba
 import wandb
 import subprocess
 from ray import tune
