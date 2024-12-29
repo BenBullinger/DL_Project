@@ -2,7 +2,7 @@
 Loads the datasets.
 """
 import torch
-from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
+from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset, LRGBDataset
 from torch_geometric.loader import DataLoader
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 import os
@@ -19,25 +19,24 @@ def get_project_root():
 
 def load_data(args):
     task_description = {}
+    #Sorry for this mess of a code but LRGBDataset doesn't capitalize their dataset names smh
+    
     if args.verbose:
         print(f"Loading {args.data}")
-    dataset_name = args.data.upper()
-    if dataset_name in ["CIFAR10", "MNIST", "CLUSTER", "PATTERN", "TSP"]:
+    dataset_name = args.data
+    if dataset_name.upper() in ["CIFAR10", "MNIST", "CLUSTER", "PATTERN", "TSP"]:
         train_loader, val_loader, test_loader, info = GNNBenchmarkLoader(args, dataset_name)
-    elif dataset_name in ["MUTAG", "ENZYMES", "PROTEINS", "COLLAB", "IMDB", "REDDIT"]:
+    elif dataset_name.upper() in ["MUTAG", "ENZYMES", "PROTEINS", "COLLAB", "IMDB", "REDDIT"]:
         train_loader, val_loader, test_loader, info = TUDatasetLoader(args, dataset_name)
+    elif dataset_name in ["PascalVOC-SP", "COCO-SP", "PCQM-Contact", "Peptides-func", "Peptides-struct"]:
+        train_loader, val_loader, test_loader, info = LRGBDatasetLoader(args, dataset_name)
     else:
         raise ValueError(f"Dataset called {dataset_name} was not found. Check out the available dataset options once we enable that")
     return train_loader, val_loader, test_loader, info
 
 def GNNBenchmarkLoader(args, dataset_name):
     data_dir = os.path.join(get_project_root(), "data", "GNNBenchmarkDataset")
-    train_dataset = GNNBenchmarkDataset(
-        root=data_dir,
-        name=dataset_name, 
-        split="train", 
-        pre_transform=preprocess_dataset(args)
-    )
+    train_dataset = GNNBenchmarkDataset(root=data_dir, name=dataset_name, split="train", pre_transform=preprocess_dataset(args))
     val_dataset = GNNBenchmarkDataset(root=data_dir, name=dataset_name, split="val" , pre_transform=preprocess_dataset(args))
     test_dataset = GNNBenchmarkDataset(root=data_dir, name=dataset_name, split="test" , pre_transform=preprocess_dataset(args))
     
@@ -67,6 +66,20 @@ def TUDatasetLoader(args, dataset_name):
     info = create_info(dataset, datalist_prepocessed[0])
 
     return train_loader, val_loader, test_loader, info
+
+def LRGBDatasetLoader(args, dataset_name):
+    data_dir = os.path.join(get_project_root(), "data", "LRGBDataset")
+    train_dataset = LRGBDataset(root=data_dir, name=dataset_name, split="train", pre_transform=preprocess_dataset(args))
+    val_dataset = LRGBDataset(root=data_dir, name=dataset_name, split="val" , pre_transform=preprocess_dataset(args))
+    test_dataset = LRGBDataset(root=data_dir, name=dataset_name, split="test" , pre_transform=preprocess_dataset(args))
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)  
+    info = create_info(train_dataset)
+
+    return train_loader, val_loader, test_loader, info
+
 
 def create_info(dataset, sample=None):
     """
