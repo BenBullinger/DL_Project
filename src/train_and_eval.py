@@ -12,6 +12,7 @@ import torch
 from tqdm import tqdm
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
+from torch_geometric.graphgym.models.encoder import AtomEncoder
 import torch.nn.functional as F
 from src.nn.gin import GIN
 from src.nn.gat_super import GATSuper
@@ -20,6 +21,7 @@ from src.nn.gamba_simple import Gamba
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
+import src.utils.metrics as metrics
 #from src.nn.gamba import Gamba
 import wandb
 import subprocess
@@ -56,10 +58,11 @@ def train_and_eval(args):
     seed_everything(args.seed)
 
     device = args.device
-    dataset_name = args.data.upper()
     
     train_loader, val_loader, test_loader, task_info = load_data(args)
-    
+    atom_encoder = AtomEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
+    task_info["node_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["node_feature_dims"]
+
     if args.model == "gin":
         model = GIN(
             in_channels=task_info["node_feature_dims"],
@@ -77,7 +80,7 @@ def train_and_eval(args):
         model = GATSuper(
             in_channels=task_info["node_feature_dims"],
             hidden_channels=args.hidden_channel,
-            layers=2,
+            layers=1,
             out_channels=task_info["output_dims"],
             heads=args.heads,
             normalization="layernorm",
@@ -111,8 +114,8 @@ def train_and_eval(args):
             args=args,
             use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
         ).to(device)
-    
-    return train(model, train_loader, val_loader, args=args)
+  
+    return train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, args=args)
 
 
 def get_hyperparameter_space(model_name):
@@ -141,7 +144,7 @@ def get_hyperparameter_space(model_name):
             "mlp_depth": tune.choice([1, 2, 3])
         }
 
-def train(model, train_loader, val_loader, args, config=None):
+def train(model, train_loader, val_loader, test_loader, atom_encoder, args, config=None):
     """Modified training function to support hyperparameter tuning"""
     device = args.device
     
@@ -153,7 +156,7 @@ def train(model, train_loader, val_loader, args, config=None):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     scheduler_dict =  {
         'None': torch.optim.lr_scheduler.LambdaLR(optimizer, (lambda x : 1), last_epoch=- 1, verbose=False),
-        'Plateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',factor=0.8, patience=12, threshold=0.1, threshold_mode='rel', min_lr=1e-6),
+        'Plateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',factor=0.8, patience=args.scheduler_patience, threshold=0.1, threshold_mode='rel', min_lr=1e-6),
     }
     scheduler = scheduler_dict[args.scheduler]
 
@@ -161,7 +164,9 @@ def train(model, train_loader, val_loader, args, config=None):
     patience = args.patience if hasattr(args, 'patience') else 20
     patience_counter = 0
     
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = metrics.train_losses_dict[args.data][0]
+    loss_fn_name = metrics.train_losses_dict[args.data][1]
+    report_metric = metrics.report_metric_dict[args.data]
     
     for epoch in tqdm(range(0, args.epochs+1), desc="Training", unit="epoch"):
         model.train()
@@ -174,26 +179,32 @@ def train(model, train_loader, val_loader, args, config=None):
             optimizer.zero_grad()
 
             edge_attr = getattr(batch, 'edge_attr', None)
+            if atom_encoder is not None:
+                batch = atom_encoder(batch)
             output = model(batch.x, batch.edge_index, batch.batch,
-                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE) )
+                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)
-
+            if loss_fn_name == "BCE":
+                output = torch.sigmoid(output)
             loss = loss_fn(output, batch.y)
             loss.backward()
             optimizer.step()
 
             predictions = output.argmax(dim=-1)
-            correct += (predictions == batch.y).sum().item()
-            total_samples += batch.y.size(0)
+            if loss_fn_name in ["BCE", "MSE"]:
+                avg_accuracy = float('NaN')
+            else:
+                correct += (predictions == batch.y).sum().item()
+                total_samples += batch.y.size(0)
+                avg_accuracy = correct / total_samples
+            
             total_loss += loss.item()
-
-        avg_loss = total_loss / len(train_loader)
-        avg_accuracy = correct / total_samples
+            avg_loss = total_loss / len(train_loader)
 
         if val_loader is not None:
-            val_loss, val_accuracy = evaluate(model, val_loader, args)
+            val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder)
             scheduler_param_dict =  {
             'None': None,
             'Plateau': val_loss,
@@ -202,19 +213,20 @@ def train(model, train_loader, val_loader, args, config=None):
 
 
         if not epoch % 20 and val_loader is not None:
-            val_loss, val_accuracy = evaluate(model, val_loader, args)
+            val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder)
+            test_loss, test_report = evaluate(model, test_loader, args, atom_encoder=atom_encoder)
             if args.wandb:
                 wandb.log({
                     "train_loss": avg_loss, 
-                    "train_accuracy": avg_accuracy,
+                    f"train_{report_metric}": avg_accuracy,
                     "val_loss": val_loss, 
-                    "val_accuracy": val_accuracy,
+                    f"val_{report_metric}": val_report,
                     "epoch": epoch
                 })
-            tqdm.write(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}, Train Acc: {avg_accuracy:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}, 'lr': {optimizer.param_groups[0]['lr']}")
+            tqdm.write(f"Epoch {epoch} - Train Loss ({loss_fn_name}): {avg_loss:.4f}, Train {report_metric}: {avg_accuracy:.4f}, Val Loss ({loss_fn_name}): {val_loss:.4f}, Val {report_metric}: {val_report:.4f}, Test Loss ({loss_fn_name}): {test_loss:.4f}, Test {report_metric}: {test_report:.4f}, 'lr': {optimizer.param_groups[0]['lr']:.8f}")
 
-            if val_accuracy > best_val_accuracy:
-                best_val_accuracy = val_accuracy
+            if val_report > best_val_accuracy:
+                best_val_accuracy = val_report
                 patience_counter = 0
             else:
                 patience_counter += 1
@@ -226,7 +238,7 @@ def train(model, train_loader, val_loader, args, config=None):
             # Report metrics to Ray Tune if we're doing hyperparameter optimization
             if config is not None:
                 tune.report(
-                    val_accuracy=val_accuracy,
+                    val_accuracy=val_report,
                     val_loss=val_loss,
                     train_accuracy=avg_accuracy,
                     train_loss=avg_loss,
@@ -234,50 +246,20 @@ def train(model, train_loader, val_loader, args, config=None):
                 )
     wandb.finish()
     if val_loader is not None:
-        return evaluate(model, val_loader, args)
+        return evaluate(model, val_loader, args, atom_encoder=atom_encoder)
 
-def evaluate(model, val_loader, args):
-    model.eval()
-    total_loss = 0
-    correct = 0
-    total_samples = 0
-    loss_fn = torch.nn.CrossEntropyLoss()
-
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(val_loader):
-            # Print first batch predictions
-            if batch_idx == 0:  # Only for first batch
-                #print("\nFirst 20 samples of validation batch:")
-                #print(f"Labels:      {batch.y[:20].cpu().numpy()}")
-                
-                batch.to(args.device)
-                edge_attr = getattr(batch, 'edge_attr', None)
-                output = model(batch.x, batch.edge_index, batch.batch,
-                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
-                
-                predictions = output.argmax(dim=-1)
-                #print(f"Predictions: {predictions[:20].cpu().numpy()}")
-                #print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
-            
-            batch.to(args.device)
-            edge_attr = getattr(batch, 'edge_attr', None)
-            output = model(batch.x, batch.edge_index, batch.batch,
-                          edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
-            
-            if output.dim() == 1:
-                output = output.unsqueeze(0)
-            
-            loss = loss_fn(output, batch.y)
-            total_loss += loss.item()
-
-            predictions = output.argmax(dim=-1)
-            correct += (predictions == batch.y).sum().item()
-            total_samples += batch.y.size(0)
-
-    avg_loss = total_loss / len(val_loader)
-    accuracy = correct / total_samples
-    
-    return avg_loss, accuracy
+def evaluate(model, val_loader, args, atom_encoder):
+    report_metric = metrics.report_metric_dict[args.data]
+    if report_metric == "Acc":
+        return metrics.evaluate_acc(model, val_loader, args, atom_encoder)
+    if report_metric == "F1":
+        return metrics.evaluate_f1(model, val_loader, args, atom_encoder)
+    if report_metric == "AP":
+        return metrics.evaluate_ap(model, val_loader, args, atom_encoder)
+    if report_metric == "MAE":
+        return metrics.evaluate_mae(model, val_loader, args, atom_encoder)
+    else:
+        raise ValueError(f"\"{report_metric}\" is either not a valid metric, or not implemented.")
 
 def run_hyperparameter_optimization(args):
     """Run hyperparameter optimization using Ray Tune"""

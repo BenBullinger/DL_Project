@@ -18,16 +18,15 @@ def get_project_root():
     return current_dir
 
 def load_data(args):
-    task_description = {}
     #Sorry for this mess of a code but LRGBDataset doesn't capitalize their dataset names smh
     
     if args.verbose:
         print(f"Loading {args.data}")
     dataset_name = args.data
     if dataset_name.upper() in ["CIFAR10", "MNIST", "CLUSTER", "PATTERN", "TSP"]:
-        train_loader, val_loader, test_loader, info = GNNBenchmarkLoader(args, dataset_name)
+        train_loader, val_loader, test_loader, info = GNNBenchmarkLoader(args, dataset_name.upper())
     elif dataset_name.upper() in ["MUTAG", "ENZYMES", "PROTEINS", "COLLAB", "IMDB", "REDDIT"]:
-        train_loader, val_loader, test_loader, info = TUDatasetLoader(args, dataset_name)
+        train_loader, val_loader, test_loader, info = TUDatasetLoader(args, dataset_name.upper())
     elif dataset_name in ["PascalVOC-SP", "COCO-SP", "PCQM-Contact", "Peptides-func", "Peptides-struct"]:
         train_loader, val_loader, test_loader, info = LRGBDatasetLoader(args, dataset_name)
     else:
@@ -43,7 +42,7 @@ def GNNBenchmarkLoader(args, dataset_name):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
-    info = create_info(train_dataset)
+    info = create_info(train_dataset, args)
     
     return train_loader, val_loader, test_loader, info
 
@@ -63,7 +62,7 @@ def TUDatasetLoader(args, dataset_name):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)   
-    info = create_info(dataset, datalist_prepocessed[0])
+    info = create_info(dataset, args, datalist_prepocessed[0])
 
     return train_loader, val_loader, test_loader, info
 
@@ -76,12 +75,12 @@ def LRGBDatasetLoader(args, dataset_name):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)  
-    info = create_info(train_dataset)
+    info = create_info(train_dataset, args)
 
     return train_loader, val_loader, test_loader, info
 
 
-def create_info(dataset, sample=None):
+def create_info(dataset, args, sample=None):
     """
     Given a dataset, it takes a sample and creates the task overview dictionary.
     Also determines whether the task is graph-level or node-level prediction.
@@ -109,10 +108,13 @@ def create_info(dataset, sample=None):
             task_type = "node_prediction"
         else:
             raise ValueError(f"Cannot determine task type for graph with y shape {sample.y.shape}")
+    
+    needs_ogb_encoder = args.data in ["Peptides-func", "Peptides-struct"]        
 
     return {
         "node_feature_dims": node_feature_dims,
         "output_dims": num_classes,
         "edge_feature_dims": edge_feature_dims,
         "task_type": task_type,
+        "needs_ogb_encoder" :needs_ogb_encoder
     }

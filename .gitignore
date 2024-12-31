@@ -2,5 +2,7 @@
 *__pycache__
 data/TUDataset
 data/GNNBenchmarkDataset
+data/LRGBDataset
+data/configs/sample_config*
 wandb
 wandb.key

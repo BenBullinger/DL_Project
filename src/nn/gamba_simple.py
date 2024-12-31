@@ -62,9 +62,6 @@ class Gamba(nn.Module):
         self.layer_norm = nn.LayerNorm(hidden_channels)
         
     def forward(self, x, edge_index, batch, **kwargs):
-        #input(f"{x.shape}, {batch.shape}")
-        batch_size = batch.max().item() + 1 
-
         if self.enc is not None:
             x = self.enc(x)
         x = self.input_gin(x, edge_index)

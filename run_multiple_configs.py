@@ -27,6 +27,7 @@ def get_default_config():
         "wandb": False,
         "learning_rate": 1e-4,
         "scheduler": "None",
+        "scheduler_patience": 16,
         "simon_gaa": False,
         "num_virtual_tokens": 4,
         "token_aggregation": "mean",
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     # List of configuration files
     config_files = [
         "data/configs/sample_config.json",
-        "data/configs/sample_config2.json",
+        #"data/configs/sample_config2.json",
         #"data/configs/sample_config3.json"
         # Add more config files as needed
     ]
