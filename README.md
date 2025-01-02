@@ -14,6 +14,8 @@ This is a short introduciton how to run things:
 
 * To run gamba install transformers `pip install transformers`
 
+* Then also install `pip install ray[tune]` and `pip install pynndescent`
+
 To run wandb logging, add your API key to `wandb.key`. (Wandb logging is currently unimplemented)
 
 ### Running Experiments:

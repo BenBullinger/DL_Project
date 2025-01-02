@@ -18,6 +18,7 @@ from src.nn.gin import GIN
 from src.nn.gat_super import GATSuper
 from src.nn.graph_transformer import GraphTransformerNet
 from src.nn.gamba_simple import Gamba
+from src.nn.gamba_simple_multi import GambaMulti
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
@@ -100,20 +101,36 @@ def train_and_eval(args):
             dropout=args.dropout
         ).to(device)
     elif args.model == "gamba":
-        model = Gamba(
-            in_channels=task_info["node_feature_dims"],
-            hidden_channels=args.hidden_channel,
-            layers=1,
-            out_channels=task_info["output_dims"],
-            mlp_depth=2,
-            num_virtual_tokens=args.num_virtual_tokens,
-            normalization="layernorm",
-            dropout=args.dropout,
-            use_enc=True,
-            use_dec=True,
-            args=args,
-            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
-        ).to(device)
+        if args.layers > 1:
+            model = GambaMulti(
+                in_channels=task_info["node_feature_dims"],
+                hidden_channels=args.hidden_channel,
+                layers=args.layers,
+                out_channels=task_info["output_dims"],
+                mlp_depth=2,
+                num_virtual_tokens=args.num_virtual_tokens,
+                normalization="layernorm",
+                dropout=args.dropout,
+                use_enc=True,
+                use_dec=True,
+                args=args,
+                use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+            ).to(device)
+        else:            
+            model = Gamba(
+                in_channels=task_info["node_feature_dims"],
+                hidden_channels=args.hidden_channel,
+                layers=1,
+                out_channels=task_info["output_dims"],
+                mlp_depth=2,
+                num_virtual_tokens=args.num_virtual_tokens,
+                normalization="layernorm",
+                dropout=args.dropout,
+                use_enc=True,
+                use_dec=True,
+                args=args,
+                use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+            ).to(device)
   
     return train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, args=args)
 
@@ -153,7 +170,7 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, args, conf
         for param, value in config.items():
             setattr(args, param, value)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     scheduler_dict =  {
         'None': torch.optim.lr_scheduler.LambdaLR(optimizer, (lambda x : 1), last_epoch=- 1, verbose=False),
         'Plateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',factor=0.8, patience=args.scheduler_patience, threshold=0.1, threshold_mode='rel', min_lr=1e-6),
