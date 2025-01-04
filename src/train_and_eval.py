@@ -12,18 +12,19 @@ import torch
 from tqdm import tqdm
 from torch_geometric.datasets import TUDataset, GNNBenchmarkDataset
 from torch_geometric.loader import DataLoader
-from torch_geometric.graphgym.models.encoder import AtomEncoder
+from torch_geometric.graphgym.models.encoder import AtomEncoder, BondEncoder
 import torch.nn.functional as F
 from src.nn.gin import GIN
 from src.nn.gat_super import GATSuper
 from src.nn.graph_transformer import GraphTransformerNet
 from src.nn.gamba_simple import Gamba
 from src.nn.gamba_simple_multi import GambaMulti
+from src.nn.gamba import GambaAR
+from src.nn.gamba_PVOC_multi import GambaSP
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
 import src.utils.metrics as metrics
-#from src.nn.gamba import Gamba
 import wandb
 import subprocess
 from ray import tune
@@ -62,7 +63,9 @@ def train_and_eval(args):
     
     train_loader, val_loader, test_loader, task_info = load_data(args)
     atom_encoder = AtomEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
+    bond_encoder = BondEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
     task_info["node_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["node_feature_dims"]
+    task_info["edge_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["edge_feature_dims"]
 
     if args.model == "gin":
         model = GIN(
@@ -100,7 +103,7 @@ def train_and_eval(args):
             num_heads=8,
             dropout=args.dropout
         ).to(device)
-    elif args.model == "gamba":
+    elif args.model == "gamba":          
         if args.layers > 1:
             model = GambaMulti(
                 in_channels=task_info["node_feature_dims"],
@@ -131,8 +134,37 @@ def train_and_eval(args):
                 args=args,
                 use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
             ).to(device)
-  
-    return train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, args=args)
+    elif args.model == "gambaAR":
+            model = GambaAR(
+                in_channels=task_info["node_feature_dims"],
+                hidden_channels=args.hidden_channel,
+                layers=args.layers,
+                out_channels=task_info["output_dims"],
+                mlp_depth=2,
+                num_virtual_tokens=args.num_virtual_tokens,
+                normalization="layernorm",
+                dropout=args.dropout,
+                use_enc=True,
+                use_dec=True,
+                args=args,
+                use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+            ).to(device)
+    elif args.model == "gambaSP":
+            model = GambaSP(
+                in_channels=task_info["node_feature_dims"],
+                hidden_channels=args.hidden_channel,
+                layers=args.layers,
+                out_channels=task_info["output_dims"],
+                mlp_depth=2,
+                num_virtual_tokens=args.num_virtual_tokens,
+                normalization="layernorm",
+                dropout=args.dropout,
+                use_enc=True,
+                use_dec=True,
+                args=args,
+                use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+            ).to(device)
+    return train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, bond_encoder=bond_encoder, args=args)
 
 
 def get_hyperparameter_space(model_name):
@@ -161,7 +193,7 @@ def get_hyperparameter_space(model_name):
             "mlp_depth": tune.choice([1, 2, 3])
         }
 
-def train(model, train_loader, val_loader, test_loader, atom_encoder, args, config=None):
+def train(model, train_loader, val_loader, test_loader, atom_encoder, bond_encoder, args, config=None):
     """Modified training function to support hyperparameter tuning"""
     device = args.device
     
@@ -195,12 +227,16 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, args, conf
             batch.to(device)
             optimizer.zero_grad()
 
-            edge_attr = getattr(batch, 'edge_attr', None)
+            
             if atom_encoder is not None:
                 batch = atom_encoder(batch)
+            if bond_encoder is not None:
+                batch = bond_encoder(batch)
+            edge_attr = getattr(batch, 'edge_attr', None)
+
             output = model(batch.x, batch.edge_index, batch.batch,
                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
-            
+           
             if output.dim() == 1:
                 output = output.unsqueeze(0)
             if loss_fn_name == "BCE":
@@ -221,7 +257,7 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, args, conf
             avg_loss = total_loss / len(train_loader)
 
         if val_loader is not None:
-            val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder)
+            val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
             scheduler_param_dict =  {
             'None': None,
             'Plateau': val_loss,
@@ -230,17 +266,20 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, args, conf
 
 
         if not epoch % 20 and val_loader is not None:
-            val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder)
-            test_loss, test_report = evaluate(model, test_loader, args, atom_encoder=atom_encoder)
+            train_loss, train_report = evaluate(model, train_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+            val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+            test_loss, test_report = evaluate(model, test_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
             if args.wandb:
                 wandb.log({
-                    "train_loss": avg_loss, 
-                    f"train_{report_metric}": avg_accuracy,
+                    "train_loss": train_loss, 
+                    f"train_{report_metric}": train_report,
                     "val_loss": val_loss, 
                     f"val_{report_metric}": val_report,
+                    "test_loss": test_loss,
+                    f"test_{report_metric}": test_report,
                     "epoch": epoch
                 })
-            tqdm.write(f"Epoch {epoch} - Train Loss ({loss_fn_name}): {avg_loss:.4f}, Train {report_metric}: {avg_accuracy:.4f}, Val Loss ({loss_fn_name}): {val_loss:.4f}, Val {report_metric}: {val_report:.4f}, Test Loss ({loss_fn_name}): {test_loss:.4f}, Test {report_metric}: {test_report:.4f}, 'lr': {optimizer.param_groups[0]['lr']:.8f}")
+            tqdm.write(f"Epoch {epoch} - Train Loss ({loss_fn_name}): {train_loss:.4f}, Train {report_metric}: {train_report:.4f}, Val Loss ({loss_fn_name}): {val_loss:.4f}, Val {report_metric}: {val_report:.4f}, Test Loss ({loss_fn_name}): {test_loss:.4f}, Test {report_metric}: {test_report:.4f}, 'lr': {optimizer.param_groups[0]['lr']:.8f}")
 
             if val_report > best_val_accuracy:
                 best_val_accuracy = val_report
@@ -263,18 +302,18 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, args, conf
                 )
     wandb.finish()
     if val_loader is not None:
-        return evaluate(model, val_loader, args, atom_encoder=atom_encoder)
+        return evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
 
-def evaluate(model, val_loader, args, atom_encoder):
+def evaluate(model, val_loader, args, atom_encoder, bond_encoder):
     report_metric = metrics.report_metric_dict[args.data]
     if report_metric == "Acc":
-        return metrics.evaluate_acc(model, val_loader, args, atom_encoder)
+        return metrics.evaluate_acc(model, val_loader, args, atom_encoder, bond_encoder)
     if report_metric == "F1":
-        return metrics.evaluate_f1(model, val_loader, args, atom_encoder)
+        return metrics.evaluate_f1(model, val_loader, args, atom_encoder, bond_encoder)
     if report_metric == "AP":
-        return metrics.evaluate_ap(model, val_loader, args, atom_encoder)
+        return metrics.evaluate_ap(model, val_loader, args, atom_encoder, bond_encoder)
     if report_metric == "MAE":
-        return metrics.evaluate_mae(model, val_loader, args, atom_encoder)
+        return metrics.evaluate_mae(model, val_loader, args, atom_encoder, bond_encoder)
     else:
         raise ValueError(f"\"{report_metric}\" is either not a valid metric, or not implemented.")
 

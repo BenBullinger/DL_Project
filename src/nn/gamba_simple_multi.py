@@ -52,6 +52,8 @@ class GambaMulti(nn.Module):
             for _ in range(layers)
         ]
         self.mamba_layers = nn.ModuleList([MambaModel(config) for config in self.mamba_configs])
+
+        self.layer_norm_mamba = nn.LayerNorm(hidden_channels*2)
  
         self.merge_layers = nn.ModuleList([
             get_mlp(
@@ -74,8 +76,7 @@ class GambaMulti(nn.Module):
             supported_pools = {'add': global_add_pool, 'mean': global_mean_pool, 'max': global_max_pool}
             self.readout = supported_pools.get(use_readout, global_add_pool)
         
-        # Add layer normalization
-        self.layer_norm = nn.LayerNorm(hidden_channels)
+        
         
     def forward(self, x, edge_index, batch, **kwargs):
         if self.enc is not None:
@@ -87,13 +88,14 @@ class GambaMulti(nn.Module):
         for i in range(self.num_layers):
 
             x = torch.cat([x, pe], dim=1)
-            
+
             x_dense, mask = to_dense_batch(x, batch)
             alpha = self.theta_layers[i](x_dense).transpose(1,2)
             alpha_X = alpha @ x_dense
 
             x_mamba = self.mamba_layers[i](inputs_embeds=alpha_X).last_hidden_state
-        
+            x_mamba = self.layer_norm_mamba(x_mamba)
+            
             x_m = x_mamba[batch]
             x = self.merge_layers[i](torch.cat([x_orig, x_m[:,-1,:]], dim=1)) 
         

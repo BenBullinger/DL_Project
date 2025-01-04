@@ -46,6 +46,7 @@ class Gamba(nn.Module):
             num_hidden_layers=4
         )
         self.mamba = MambaModel(self.mamba_config)
+        self.layer_norm_mamba = nn.LayerNorm(hidden_channels*2)
         
         self.merge = get_mlp(input_dim=hidden_channels*3, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=1, normalization=torch.nn.LayerNorm, last_relu=False)
             
@@ -61,8 +62,6 @@ class Gamba(nn.Module):
             supported_pools = {'add': global_add_pool, 'mean': global_mean_pool, 'max': global_max_pool}
             self.readout = supported_pools.get(use_readout, global_add_pool)
         
-        # Add layer normalization
-        self.layer_norm = nn.LayerNorm(hidden_channels)
         
     def forward(self, x, edge_index, batch, **kwargs):
         if self.enc is not None:
@@ -77,7 +76,8 @@ class Gamba(nn.Module):
         alpha_X = alpha @ x_dense
 
         x_mamba = self.mamba(inputs_embeds=alpha_X).last_hidden_state
-        
+        x_mamba = self.layer_norm_mamba(x_mamba)
+
         x_m = x_mamba[batch]
         x = self.merge(torch.cat([x_orig, x_m[:,-1,:]], dim=1)) 
         

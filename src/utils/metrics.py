@@ -56,7 +56,7 @@ report_metric_dict = {
     "Peptides-struct": ("MAE")
 }
 
-def evaluate_acc(model, val_loader, args, atom_encoder=None):
+def evaluate_acc(model, val_loader, args, atom_encoder=None, bond_encoder=None):
     model.eval()
     total_loss = 0
     correct = 0
@@ -71,9 +71,11 @@ def evaluate_acc(model, val_loader, args, atom_encoder=None):
                 #print(f"Labels:      {batch.y[:20].cpu().numpy()}")
                 
                 batch.to(args.device)
-                edge_attr = getattr(batch, 'edge_attr', None)
                 if atom_encoder is not None:
                     batch = atom_encoder(batch)
+                if bond_encoder is not None:
+                    batch = bond_encoder(batch)
+                edge_attr = getattr(batch, 'edge_attr', None)
                 output = model(batch.x, batch.edge_index, batch.batch,
                              edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
                 
@@ -82,9 +84,11 @@ def evaluate_acc(model, val_loader, args, atom_encoder=None):
                 #print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
             
             batch.to(args.device)
-            edge_attr = getattr(batch, 'edge_attr', None)
             if atom_encoder is not None:
                 batch = atom_encoder(batch)
+            if bond_encoder is not None:
+                batch = bond_encoder(batch)
+            edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), full_batch=batch )
             
@@ -105,7 +109,7 @@ def evaluate_acc(model, val_loader, args, atom_encoder=None):
     return avg_loss, accuracy
 
 
-def evaluate_f1(model, val_loader, args, atom_encoder=None):
+def evaluate_f1(model, val_loader, args, atom_encoder=None, bond_encoder=None):
     model.eval()
     total_loss = 0
     all_preds = []
@@ -120,9 +124,11 @@ def evaluate_f1(model, val_loader, args, atom_encoder=None):
                 # print(f"Labels:      {batch.y[:20].cpu().numpy()}")
                 
                 batch.to(args.device)
-                edge_attr = getattr(batch, 'edge_attr', None)
                 if atom_encoder is not None:
                     batch = atom_encoder(batch)
+                if bond_encoder is not None:
+                    batch = bond_encoder(batch)
+                edge_attr = getattr(batch, 'edge_attr', None)
                 output = model(batch.x, batch.edge_index, batch.batch,
                              edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
                 
@@ -131,9 +137,11 @@ def evaluate_f1(model, val_loader, args, atom_encoder=None):
                 # print(f"Raw outputs:\n{output[:20].cpu().detach().numpy()}\n")
             
             batch.to(args.device)
-            edge_attr = getattr(batch, 'edge_attr', None)
             if atom_encoder is not None:
                 batch = atom_encoder(batch)
+            if bond_encoder is not None:
+                batch = bond_encoder(batch)
+            edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), full_batch=batch)
             
@@ -158,7 +166,7 @@ def evaluate_f1(model, val_loader, args, atom_encoder=None):
     
     return avg_loss, f1
 
-def evaluate_ap(model, val_loader, args, atom_encoder=None):
+def evaluate_ap(model, val_loader, args, atom_encoder=None, bond_encoder=None):
     """
     Evaluate the model on the validation set using Average Precision (AP) metric.
     
@@ -180,11 +188,11 @@ def evaluate_ap(model, val_loader, args, atom_encoder=None):
     with torch.no_grad():
         for batch_idx, batch in enumerate(val_loader):
             batch.to(args.device)
-            edge_attr = getattr(batch, 'edge_attr', None)
-            
-            # Forward pass
             if atom_encoder is not None:
                 batch = atom_encoder(batch)
+            if bond_encoder is not None:
+                batch = bond_encoder(batch)
+            edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
                            edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
             
@@ -212,7 +220,7 @@ def evaluate_ap(model, val_loader, args, atom_encoder=None):
     
     return avg_loss, avg_ap
 
-def evaluate_mae(model, val_loader, args, atom_encoder=None):
+def evaluate_mae(model, val_loader, args, atom_encoder=None, bond_encoder=None):
     """
     Evaluate the model on the validation set using Mean Absolute Error (MAE).
     
