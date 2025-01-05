@@ -27,7 +27,7 @@ def load_data(args):
         train_loader, val_loader, test_loader, info = GNNBenchmarkLoader(args, dataset_name.upper())
     elif dataset_name.upper() in ["MUTAG", "ENZYMES", "PROTEINS", "COLLAB", "IMDB", "REDDIT"]:
         train_loader, val_loader, test_loader, info = TUDatasetLoader(args, dataset_name.upper())
-    elif dataset_name in ["PascalVOC-SP", "COCO-SP", "PCQM-Contact", "Peptides-func", "Peptides-struct"]:
+    elif dataset_name in ["PascalVOC-SP", "PascalVOC-SP-mini", "COCO-SP", "COCO-SP-mini", "PCQM-Contact", "Peptides-func", "Peptides-struct"]:
         train_loader, val_loader, test_loader, info = LRGBDatasetLoader(args, dataset_name)
     else:
         raise ValueError(f"Dataset called {dataset_name} was not found. Check out the available dataset options once we enable that")
@@ -68,14 +68,27 @@ def TUDatasetLoader(args, dataset_name):
 
 def LRGBDatasetLoader(args, dataset_name):
     data_dir = os.path.join(get_project_root(), "data", "LRGBDataset")
-    train_dataset = LRGBDataset(root=data_dir, name=dataset_name, split="train", pre_transform=preprocess_dataset(args))
-    val_dataset = LRGBDataset(root=data_dir, name=dataset_name, split="val" , pre_transform=preprocess_dataset(args))
-    test_dataset = LRGBDataset(root=data_dir, name=dataset_name, split="test" , pre_transform=preprocess_dataset(args))
+    is_mini = dataset_name.endswith("-mini")
+    if is_mini:
+        base_name = dataset_name[:-5]
+    else:
+        base_name = dataset_name
+
+    train_dataset = LRGBDataset(root=data_dir, name=base_name, split="train", pre_transform=preprocess_dataset(args))
+    val_dataset = LRGBDataset(root=data_dir, name=base_name, split="val" , pre_transform=preprocess_dataset(args))
+    test_dataset = LRGBDataset(root=data_dir, name=base_name, split="test" , pre_transform=preprocess_dataset(args))
+
+    info = create_info(train_dataset, args)
+
+    if dataset_name == "PascalVOC-SP-mini":
+        train_dataset = [data for data in train_dataset if data.num_nodes <= 470]
+    if dataset_name == "COCO-SP-mini":
+        train_dataset = [data for data in train_dataset if data.num_nodes <= 450]
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)  
-    info = create_info(train_dataset, args)
+
 
     return train_loader, val_loader, test_loader, info
 

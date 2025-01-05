@@ -21,6 +21,7 @@ from src.nn.gamba_simple import Gamba
 from src.nn.gamba_simple_multi import GambaMulti
 from src.nn.gamba import GambaAR
 from src.nn.gamba_PVOC_multi import GambaSP
+from src.nn.gamba_ARSP_multi import GambaARSP
 from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_splits
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
@@ -151,6 +152,21 @@ def train_and_eval(args):
             ).to(device)
     elif args.model == "gambaSP":
             model = GambaSP(
+                in_channels=task_info["node_feature_dims"],
+                hidden_channels=args.hidden_channel,
+                layers=args.layers,
+                out_channels=task_info["output_dims"],
+                mlp_depth=2,
+                num_virtual_tokens=args.num_virtual_tokens,
+                normalization="layernorm",
+                dropout=args.dropout,
+                use_enc=True,
+                use_dec=True,
+                args=args,
+                use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+            ).to(device)
+    elif args.model == "gambaARSP":
+            model = GambaARSP(
                 in_channels=task_info["node_feature_dims"],
                 hidden_channels=args.hidden_channel,
                 layers=args.layers,

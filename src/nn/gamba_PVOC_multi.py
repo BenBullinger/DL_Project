@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv, MessagePassing
-from transformers import MambaConfig, MambaModel
+#from transformers import MambaConfig, MambaModel
 from torch_geometric.utils import to_dense_batch
 import torch.nn.functional as F
+from mamba_ssm import Mamba
 
 from .mlp import get_mlp
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
@@ -56,21 +57,30 @@ class MultiScaleGambaLayer(nn.Module):
         super().__init__()
         # Local spatial processing at different scales
         self.spatial_convs = nn.ModuleList([
-            SpatialConv(hidden_channels) for _ in range(3)  # 3 scales
+            SpatialConv(hidden_channels) for _ in range(8)  # 3 scales
         ])
         
+        self.h_weight = get_mlp(input_dim=hidden_channels, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=4, normalization=nn.Identity, last_relu=True)
         # Global processing with Mamba
         self.theta = nn.Linear(hidden_channels, num_virtual_tokens, bias=False)
+        """
         self.mamba_config = MambaConfig(
             hidden_size=hidden_channels,
             intermediate_size=hidden_channels * 2,
             num_hidden_layers=1
         )
         self.mamba = MambaModel(self.mamba_config)
+        """
+        self.mamba = Mamba(
+            d_model = hidden_channels,
+            d_state = 128,
+            d_conv = 4,
+            expand = 2
+        )
         
         # Merge multi-scale features
         self.merge = get_mlp(
-            input_dim=hidden_channels * 4,  # 3 scales + mamba
+            input_dim=hidden_channels * 9,  # 3 scales + mamba
             hidden_dim=hidden_channels,
             output_dim=hidden_channels,
             mlp_depth=1,
@@ -89,10 +99,11 @@ class MultiScaleGambaLayer(nn.Module):
             xs.append(conv(x, edge_index, edge_attr))
         
         # Global processing
+        #x_h = self.h_weight(x)
         x_dense, mask = to_dense_batch(x, batch)
         alpha = self.theta(x_dense).transpose(1,2)
         alpha_X = alpha @ x_dense
-        x_mamba = self.mamba(inputs_embeds=alpha_X).last_hidden_state
+        x_mamba = self.mamba(alpha_X)
         x_m = x_mamba[batch][:,-1,:]  # Use last token
         
         # Merge all features

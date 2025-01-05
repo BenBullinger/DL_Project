@@ -1,16 +1,16 @@
 {
     "device": 0,
-    "model":"gamba",
+    "model":"gambaSP",
     "readout": "add",
-    "data":"Peptides-func",
-    "epochs":400,
+    "data":"PascalVOC-SP",
+    "epochs":200,
     "batch_size":64,
-    "laplacePE":4,
+    "laplacePE":0,
     "hidden_channel":96,
-    "layers":4,
+    "layers": 4,
     "weight_decay":0.01,
     "learning_rate": 4e-4,
-    "num_virtual_tokens": 8,
+    "num_virtual_tokens": 32,
     "add_virtual_node":false,
     "scheduler": "Plateau",
     "scheduler_patience": 12,
@@ -20,5 +20,5 @@
     "verbose": false,
     "simon_gaa": true,
     "wandb": true,
-    "name": "multi-small-tokens"
+    "name": "pascal-longer-tokens"
 }

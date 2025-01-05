@@ -24,6 +24,8 @@ train_losses_dict = {
     #LRGBDataset:
     "COCO-SP": (torch.nn.CrossEntropyLoss(), "CE"),
     "PascalVOC-SP" : (torch.nn.CrossEntropyLoss(), "CE"),
+    "COCO-SP-mini": (torch.nn.CrossEntropyLoss(), "CE"),
+    "PascalVOC-SP-mini" : (torch.nn.CrossEntropyLoss(), "CE"),
     "PCQM-Contact": (),
     "Peptides-func": (torch.nn.BCELoss(), "BCE"),
     "Peptides-struct": (torch.nn.MSELoss(), "MSE")
@@ -51,6 +53,8 @@ report_metric_dict = {
     #LRGBDataset:
     "COCO-SP": ("F1"),
     "PascalVOC-SP" : ("F1"),
+    "COCO-SP-mini": ("F1"),
+    "PascalVOC-SP-mini" : ("F1"),
     "PCQM-Contact": (),
     "Peptides-func": ("AP"),
     "Peptides-struct": ("MAE")

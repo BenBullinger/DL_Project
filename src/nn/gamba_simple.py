@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv, GatedGraphConv
-from transformers import MambaConfig, MambaModel
+#from transformers import MambaConfig, MambaModel
 from torch_geometric.utils import to_dense_batch
-
+from mamba_ssm import Mamba
 from .mlp import get_mlp
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
 
@@ -40,12 +40,12 @@ class Gamba(nn.Module):
         self.theta = nn.Linear(hidden_channels*2, num_virtual_tokens, bias=False)
         
         # Configure Mamba
-        self.mamba_config = MambaConfig(
-            hidden_size=hidden_channels*2,
-            intermediate_size=hidden_channels * 2,
-            num_hidden_layers=4
+        self.mamba = Mamba(
+            d_model = hidden_channels,
+            d_state = 128,
+            d_conv = 4,
+            expand = 2
         )
-        self.mamba = MambaModel(self.mamba_config)
         self.layer_norm_mamba = nn.LayerNorm(hidden_channels*2)
         
         self.merge = get_mlp(input_dim=hidden_channels*3, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=1, normalization=torch.nn.LayerNorm, last_relu=False)
@@ -75,7 +75,7 @@ class Gamba(nn.Module):
         alpha = self.theta(x_dense).transpose(1,2)
         alpha_X = alpha @ x_dense
 
-        x_mamba = self.mamba(inputs_embeds=alpha_X).last_hidden_state
+        x_mamba = self.mamba(alpha_X)
         x_mamba = self.layer_norm_mamba(x_mamba)
 
         x_m = x_mamba[batch]
