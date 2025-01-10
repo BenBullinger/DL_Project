@@ -21,11 +21,69 @@ from src.utils.preprocess import preprocess_dataset, explicit_preprocess, fix_sp
 from src.utils.dataset import load_data
 from src.utils.misc import seed_everything, timer
 #from src.nn.gamba import Gamba
+from torch_geometric.datasets.graph_generator import ERGraph
+import time
+import matplotlib.pyplot as plt
 import wandb
 import subprocess
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
+
+def initialize_model(args, task_info):
+    if args.model == "gin":
+        model = GIN(
+            in_channels=task_info["node_feature_dims"],
+            hidden_channels=args.hidden_channel,
+            layers=1,
+            out_channels=task_info["output_dims"],
+            mlp_depth=2,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+        )
+    elif args.model == "gat":
+        model = GATSuper(
+            in_channels=task_info["node_feature_dims"],
+            hidden_channels=args.hidden_channel,
+            layers=2,
+            out_channels=task_info["output_dims"],
+            heads=args.heads,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+        )
+    elif args.model == "gt":
+        model = GraphTransformerNet(
+            node_dim_in=task_info["node_feature_dims"],
+            edge_dim_in=task_info["edge_feature_dims"],
+            out_dim=task_info["output_dims"],
+            pe_in_dim=args.laplacePE,
+            hidden_dim=args.hidden_channel,
+            num_heads=8,
+            dropout=args.dropout
+        )
+    elif args.model == "gamba":
+        model = Gamba(
+            in_channels=task_info["node_feature_dims"],
+            hidden_channels=args.hidden_channel,
+            layers=1,
+            out_channels=task_info["output_dims"],
+            mlp_depth=2,
+            num_virtual_tokens=args.num_virtual_tokens,
+            normalization="layernorm",
+            dropout=args.dropout,
+            use_enc=True,
+            use_dec=True,
+            args=args,
+            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
+        )
+    
+    return model
 
 @timer
 def train_and_eval(args):
@@ -60,57 +118,9 @@ def train_and_eval(args):
     
     train_loader, val_loader, test_loader, task_info = load_data(args)
     
-    if args.model == "gin":
-        model = GIN(
-            in_channels=task_info["node_feature_dims"],
-            hidden_channels=args.hidden_channel,
-            layers=1,
-            out_channels=task_info["output_dims"],
-            mlp_depth=2,
-            normalization="layernorm",
-            dropout=args.dropout,
-            use_enc=True,
-            use_dec=True,
-            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
-        ).to(device)
-    elif args.model == "gat":
-        model = GATSuper(
-            in_channels=task_info["node_feature_dims"],
-            hidden_channels=args.hidden_channel,
-            layers=2,
-            out_channels=task_info["output_dims"],
-            heads=args.heads,
-            normalization="layernorm",
-            dropout=args.dropout,
-            use_enc=True,
-            use_dec=True,
-            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
-        ).to(device)    
-    elif args.model == "gt":
-        model = GraphTransformerNet(
-            node_dim_in=task_info["node_feature_dims"],
-            edge_dim_in=task_info["edge_feature_dims"],
-            out_dim=task_info["output_dims"],
-            pe_in_dim=args.laplacePE,
-            hidden_dim=args.hidden_channel,
-            num_heads=8,
-            dropout=args.dropout
-        ).to(device)
-    elif args.model == "gamba":
-        model = Gamba(
-            in_channels=task_info["node_feature_dims"],
-            hidden_channels=args.hidden_channel,
-            layers=1,
-            out_channels=task_info["output_dims"],
-            mlp_depth=2,
-            num_virtual_tokens=args.num_virtual_tokens,
-            normalization="layernorm",
-            dropout=args.dropout,
-            use_enc=True,
-            use_dec=True,
-            args=args,
-            use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
-        ).to(device)
+    model = initialize_model(args, task_info)
+    if(model is not None):
+        model = model.to(device)
     
     return train(model, train_loader, val_loader, args=args)
 
@@ -309,6 +319,38 @@ def run_hyperparameter_optimization(args):
     
     return best_trial.config
 
+def benchmark_model(args, node_sizes, edge_prob=0.1):
+    device = args.device
+    
+    train_loader, val_loader, test_loader, task_info = load_data(args)
+    model = initialize_model(args, task_info).to(device)
+    model.eval()
+
+    times = []
+    for num_nodes in node_sizes:
+        print(ERGraph(num_nodes=num_nodes, edge_prob=edge_prob))
+        er_generator = ERGraph(num_nodes=num_nodes, edge_prob=edge_prob)
+        data = er_generator()
+
+        batch = torch.zeros(data.num_nodes, dtype=torch.long, device=device)
+
+        start_time = time.time()
+        with torch.no_grad():
+            model(torch.rand((num_nodes, task_info["node_feature_dims"]), device=device), data.edge_index, edge_attr=data.edge_attr, batch=batch)
+        end_time = time.time()
+
+        times.append(end_time - start_time)
+        print(f"Nodes: {num_nodes}, Time: {end_time - start_time:.4f} seconds")
+
+    return times
+
+def plot_benchmark_results(node_sizes, times):
+    plt.plot(node_sizes, times)
+    plt.xlabel("Number of nodes")
+    plt.ylabel("Time (s)")
+    plt.title("Model benchmarking results")
+    plt.show()
+
 def main(args):
     if args.optimize_hyperparams:
         best_config = run_hyperparameter_optimization(args)
@@ -317,6 +359,8 @@ def main(args):
             json.dump(best_config, f)
     else:
         train_and_eval(args)
+        # times = benchmark_model(args, node_sizes=[10, 20, 50], edge_prob=0.1)
+        # plot_benchmark_results([10, 20, 50], times)
 
 if __name__ == "__main__":
     import argparse

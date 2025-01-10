@@ -1,6 +1,6 @@
 {
-    "device": 0,
-    "model":"gat",
+    "device": -1,
+    "model":"gamba",
     "readout": "add",
     "data":"PROTEINS",
     "epochs":200,
