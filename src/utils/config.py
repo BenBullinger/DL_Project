@@ -27,7 +27,7 @@ def command_line_parser():
     parser.add_argument("--optimize_hyperparams", action="store_true", help="Run hyperparameter optimization")
     parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
-
+    parser.add_argument('--RW_length', type=int, default=0, help="Specifies the length of random walk positional encoding")
 
     args = parser.parse_args()
 
