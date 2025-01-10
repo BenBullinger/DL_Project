@@ -2,13 +2,12 @@ import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv, GatedGraphConv
 #from transformers import MambaConfig, MambaModel
-from mamba_ssm import Mamba
 from torch_geometric.utils import to_dense_batch
-
+from mamba_ssm import Mamba
 from .mlp import get_mlp
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
 
-class GambaMulti(nn.Module):
+class Gamba(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -38,29 +37,19 @@ class GambaMulti(nn.Module):
         
         self.pe_gnn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
 
-        self.theta_layers = nn.ModuleList([
-            nn.Linear(hidden_channels*2, num_virtual_tokens, bias=False)
-            for _ in range(layers)
-        ])
+        self.theta = nn.Linear(hidden_channels*2, num_virtual_tokens, bias=False)
         
         # Configure Mamba
-        
-        self.mamba_layers = nn.ModuleList([
-            Mamba(d_model = hidden_channels*2,d_state = 128,d_conv = 4,expand = 2)
-            for _ in range(layers)
-        ])
-
+        self.mamba = Mamba(
+            d_model = hidden_channels*2,
+            d_state = 128,
+            d_conv = 4,
+            expand = 2
+        )
         self.layer_norm_mamba = nn.LayerNorm(hidden_channels*2)
- 
-        self.merge_layers = nn.ModuleList([
-            get_mlp(
-                input_dim=hidden_channels * 3, hidden_dim=hidden_channels,
-                output_dim=hidden_channels, mlp_depth=1,
-                normalization=torch.nn.LayerNorm, last_relu=False
-            )
-            for _ in range(layers)
-        ])
-
+        
+        self.merge = get_mlp(input_dim=hidden_channels*3, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=1, normalization=torch.nn.LayerNorm, last_relu=False)
+            
         # Output layers
         last_gin_dim = hidden_channels if use_dec else out_channels
         self.output_gin = GINConv(nn.Linear(hidden_channels, last_gin_dim))
@@ -74,31 +63,29 @@ class GambaMulti(nn.Module):
             self.readout = supported_pools.get(use_readout, global_add_pool)
         
         
-        
     def forward(self, x, edge_index, batch, **kwargs):
         if self.enc is not None:
             x = self.enc(x)
         x_orig =x
         pe = self.pe_gnn(x, edge_index)
         #x = self.input_gin(x, edge_index)
+
+        x = torch.cat([x, pe], dim=1)
+        x_dense, mask = to_dense_batch(x, batch)
+        alpha = torch.sigmoid(self.theta(x_dense))
         
-        for i in range(self.num_layers):
+        #alpha_X = alpha.transpose(1,2) @ x_dense
+        #x_mamba = self.mamba(alpha_X)
+        
+        mask = torch.bernoulli(alpha)
+        #mask = top_k_mask(alpha=alpha, k=1)
+        #mask = (alpha > 0.7).float()
+        tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
+        x_mamba = self.mamba(tokens)
+        x_mamba = self.layer_norm_mamba(x_mamba)
 
-            x = torch.cat([x, pe], dim=1)
-
-            x_dense, mask = to_dense_batch(x, batch)
-            alpha = torch.sigmoid(self.theta_layers[i](x_dense))
-            #tokens = alpha.transpose(1,2) @ x_dense
-
-            #mask = torch.bernoulli(alpha)
-            mask = top_k_mask(alpha=alpha, k=1)
-            #mask = (alpha > 0.7).float()
-            tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
-            x_mamba = self.mamba_layers[i](tokens)
-            x_mamba = self.layer_norm_mamba(x_mamba)
-            
-            x_m = x_mamba[batch]
-            x = self.merge_layers[i](torch.cat([x_orig, x_m[:,-1,:]], dim=1)) 
+        x_m = x_mamba[batch]
+        x = self.merge(torch.cat([x_orig, x_m[:,-1,:]], dim=1)) 
         
         x = self.output_gin(x, edge_index)
         
@@ -114,9 +101,9 @@ class GambaMulti(nn.Module):
 def top_k_mask(alpha: torch.Tensor, k: int) -> torch.Tensor:
     """
     alpha: Tensor of shape [B, N, K]
-        B = batch size
-        N = number of nodes
-        K = number of "slots" or channels
+      B = batch size
+      N = number of nodes
+      K = number of "slots" or channels
     k: number of top elements to keep in each slot
 
     Returns a binary mask of the same shape [B, N, K],

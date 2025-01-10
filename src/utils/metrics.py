@@ -81,7 +81,7 @@ def evaluate_acc(model, val_loader, args, atom_encoder=None, bond_encoder=None):
                     batch = bond_encoder(batch)
                 edge_attr = getattr(batch, 'edge_attr', None)
                 output = model(batch.x, batch.edge_index, batch.batch,
-                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
+                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), rwse=(None if not hasattr(batch, "random_walk_pe") else batch.random_walk_pe))
                 
                 predictions = output.argmax(dim=-1)
                 #print(f"Predictions: {predictions[:20].cpu().numpy()}")
@@ -134,7 +134,7 @@ def evaluate_f1(model, val_loader, args, atom_encoder=None, bond_encoder=None):
                     batch = bond_encoder(batch)
                 edge_attr = getattr(batch, 'edge_attr', None)
                 output = model(batch.x, batch.edge_index, batch.batch,
-                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
+                             edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), rwse=(None if not hasattr(batch, "random_walk_pe") else batch.random_walk_pe))
                 
                 predictions = output.argmax(dim=-1)
                 # print(f"Predictions: {predictions[:20].cpu().numpy()}")
@@ -198,7 +198,7 @@ def evaluate_ap(model, val_loader, args, atom_encoder=None, bond_encoder=None):
                 batch = bond_encoder(batch)
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
-                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
+                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), rwse=(None if not hasattr(batch, "random_walk_pe") else batch.random_walk_pe))
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)
@@ -255,7 +255,7 @@ def evaluate_mae(model, val_loader, args, atom_encoder=None, bond_encoder=None):
             # Forward pass
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
-                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE))
+                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), rwse=(None if not hasattr(batch, "random_walk_pe") else batch.random_walk_pe))
             
             if output.dim() == 1:
                 output = output.unsqueeze(0)

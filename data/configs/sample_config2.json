@@ -1,11 +1,11 @@
 {
     "device": 0,
-    "model":"gambaSP",
+    "model":"gambaARSP",
     "readout": "add",
-    "data":"PascalVOC-SP",
-    "epochs":200,
+    "data":"Peptides-func",
+    "epochs":240,
     "batch_size":64,
-    "laplacePE":0,
+    "laplacePE":4,
     "hidden_channel":96,
     "layers": 4,
     "weight_decay":0.01,
@@ -19,6 +19,6 @@
     "heads":1,
     "verbose": false,
     "simon_gaa": true,
-    "wandb": true,
-    "name": "pascal-longer-tokens"
+    "wandb": false,
+    "name": "AR-high-tokens"
 }

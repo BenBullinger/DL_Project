@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-#from transformers import MambaConfig, MambaModel
+from torch_geometric.nn import GatedGraphConv
 from mamba_ssm import Mamba
 from torch_geometric.utils import to_dense_batch
 from .gamba_PVOC_multi import SpatialConv
@@ -11,20 +11,25 @@ class MultiScaleARSPBlock(nn.Module):
         super().__init__()
         self.num_virtual_tokens = num_virtual_tokens
         # -- Multi-scale SpatialConvs (like GambaSP)
+        spatial_convs = 3
         self.spatial_convs = nn.ModuleList([
-            SpatialConv(hidden_channels) for _ in range(8)  # or however many scales you want
+            SpatialConv(hidden_channels) for _ in range(spatial_convs)  # or however many scales you want
         ])
+        self.gated_gcn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
         
-        # -- GRU approach for virtual tokens (like GambaAR)
-        # We will produce embeddings from the (x, multi-scale features) and feed them to a GRU in a loop.
-        # "x" will have shape [N, hidden_channels]; we might project it to [N, something] then do a to_dense_batch...
-        
-        self.gru_cell = nn.GRUCell(hidden_channels, hidden_channels)  
+        # -- GRU approach for virtual tokens (like GambaAR)      
+        self.gru_cell = nn.GRUCell(hidden_channels*2, hidden_channels)
+        weights = get_mlp(
+            input_dim=hidden_channels*3, hidden_dim=hidden_channels*2,
+            mlp_depth=3, output_dim=1,
+            normalization=nn.Identity, last_relu=False
+        )
+        self.weights = nn.Sequential(weights, nn.Sigmoid()) 
         # If you want a bigger dimension for the GRU, you can adjust above to "hidden_channels * 2", etc.
 
         # -- Mamba config
         self.mamba = Mamba(
-            d_model = hidden_channels,
+            d_model = hidden_channels*2,
             d_state = 128,
             d_conv = 4,
             expand = 2
@@ -33,7 +38,7 @@ class MultiScaleARSPBlock(nn.Module):
         # -- Merge multi-scale features + final Mamba token
         # Suppose we have 8 SpatialConv outputs + 1 from Mamba = 9 × hidden_channels
         self.merge = get_mlp(
-            input_dim=hidden_channels * 9,  
+            input_dim=hidden_channels * (spatial_convs+2),  
             hidden_dim=hidden_channels,
             output_dim=hidden_channels,
             mlp_depth=1,
@@ -41,69 +46,58 @@ class MultiScaleARSPBlock(nn.Module):
             last_relu=False
         )
         
+        self.layer_norm_mamba = nn.LayerNorm(hidden_channels*2)
         self.layer_norm = nn.LayerNorm(hidden_channels)
 
-    def forward(self, x, edge_index, edge_attr, batch):
-        """
-        x:         [N, hidden_channels]
-        edge_index:[2, E]
-        edge_attr: [E, num_edge_features]  (e.g. 2 if sobel + boundary)
-        batch:     [N]  with batch indices
-        """
-        identity = x
-        
-        # 1) Multi-scale spatial processing
-        xs = []
-        for conv in self.spatial_convs:
-            xs.append(conv(x, edge_index, edge_attr))
-        
-        # 2) GRU-based virtual token approach
-        #    We'll transform x -> dense batch -> iterative GRU -> Mamba
-        x_dense, mask = to_dense_batch(x, batch)  # [B, maxN, hidden_channels]
-        B, maxN, C = x_dense.shape
-        
-        # We'll keep a hidden state h per batch example. shape: [B, hidden_channels]
-        h = torch.zeros(B, C, device=x.device)  # initial zero hidden states
+    def forward(self, x, edge_index, edge_attr, batch, **kwargs):
+            """
+            x:         [N, hidden_channels]
+            edge_index:[2, E]
+            edge_attr: [E, num_edge_features]  (e.g. 2 if sobel + boundary)
+            batch:     [N]  with batch indices
+            """
+            identity = x
+            pe = self.gated_gcn(x, edge_index)
+            probabilistic = True
+            #Spatial conv thing
+            xs = []
+            for conv in self.spatial_convs:
+                xs.append(conv(x, edge_index, edge_attr))
 
-        # Collect the tokens from each iteration
-        tokens = []
-        num_tokens = self.num_virtual_tokens if self.training else 8*self.num_virtual_tokens
-        for _ in range(num_tokens):
-            # A simple approach: do a mean or sum over the node features per graph, and combine with h
-            # Or you can do something more advanced. For simplicity, let's do a mean:
-            x_mean = x_dense.mean(dim=1)  # [B, hidden_channels]
-            
-            # Combine x_mean with the previous hidden state h in some manner
-            # For example, GRUCell input is [B, input_size], so we can just pass x_mean
-            h = self.gru_cell(x_mean, h)  # [B, hidden_channels]
-            tokens.append(h.unsqueeze(1)) # store [B, 1, hidden_channels]
-        
-        # Stack all tokens => [B, num_virtual_tokens, hidden_channels]
-        tokens = torch.cat(tokens, dim=1)
+            x = torch.cat([x, pe], dim=1)
+            #Mamba
+            x_dense, mask = to_dense_batch(x, batch)  
+            B, maxN, C = x_dense.shape
+            h = torch.zeros(B, int(C/2), device=x.device)  
 
-        # 3) Mamba
-        #    Mamba expects something like [B, seq_len, hidden_size]
-        #    Here: [B, num_virtual_tokens, hidden_channels]
-        mamba_output = self.mamba(tokens)  # [B, num_virtual_tokens, hidden_channels]
-        mamba_output = self.layer_norm_mamba(mamba_output)  # optional LN
+            tokens = []
+            num_tokens = self.num_virtual_tokens if self.training else self.num_virtual_tokens
+            for _ in range(num_tokens):
+                #input(torch.cat([x_dense, h.unsqueeze(1).expand(-1, x_dense.shape[1], -1)], dim=-1).shape)
+                probs = self.weights(torch.cat([x_dense, h.unsqueeze(1).expand(-1, x_dense.shape[1], -1)], dim=-1))
+                #input(f"{probs.shape}, {x_dense.shape}")
+                alpha = torch.bernoulli(probs) if probabilistic else probs
+                #input(f"{alpha.shape}, {x_dense.shape}")
+                t = (alpha * x_dense).mean(dim=1)
+                #input(f"{t.shape}, {h.shape}")
+                h = self.gru_cell(t, h)  
+                tokens.append(t) 
 
-        # We'll take the last token as a summary vector for each batch
-        # or you can do any pooling across tokens
-        x_m = mamba_output[:, -1, :]  # [B, hidden_channels]
+            tokens = torch.stack(tokens, dim=1)
+            #input(tokens.shape)
+            mamba_output = self.mamba(tokens)  
+            mamba_output = self.layer_norm_mamba(mamba_output)  
 
-        # Expand x_m back to node level, mapping each node's "batch b" -> x_m[b]
-        # shape => [N, hidden_channels]
-        x_m_node = x_m[batch]
+            x_m = mamba_output[:, -1, :]  
 
-        # 4) Merge all features
-        #    Concatenate all 8 SpatialConv outputs plus x_m_node => 9 × hidden_channels
-        cat_all = torch.cat([*xs, x_m_node], dim=-1)  # [N, hidden_channels*9]
-        x_new = self.merge(cat_all)  # [N, hidden_channels]
-        
-        # 5) Residual + LN
-        out = self.layer_norm(identity + x_new)
-        
-        return out
+            x_m_node = x_m[batch]
+
+            cat_all = torch.cat([*xs, x_m_node], dim=-1)  
+            x_new = self.merge(cat_all)  
+
+            out = self.layer_norm(identity + x_new)
+
+            return out
 
 import torch
 import torch.nn as nn

@@ -90,7 +90,7 @@ class MultiScaleGambaLayer(nn.Module):
         
         self.layer_norm = nn.LayerNorm(hidden_channels)
         
-    def forward(self, x, edge_index, edge_attr, batch):
+    def forward(self, x, edge_index, edge_attr, batch, **kwargs):
         identity = x
         
         # Multi-scale spatial processing
@@ -177,7 +177,7 @@ class GambaSP(nn.Module):
         
         # Apply multi-scale layers
         for layer in self.layers:
-            x = layer(x, edge_index, edge_attr, batch)
+            x = layer(x, edge_index, edge_attr, batch, kwargs=kwargs)
         
         if self.readout is not None:
             x = self.readout(x, batch)

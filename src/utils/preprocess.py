@@ -41,6 +41,8 @@ def preprocess_dataset(config):
         transforms.append(T.AddLaplacianEigenvectorPE(k=config.laplacePE, attr_name="laplacePE"))
         if config.model == "gin":
             transforms.append(ConcatToNodeFeatures(attr_name="laplacePE"))
+    if config.RW_length > 0:
+        transforms.append(T.AddRandomWalkPE(walk_length=config.RW_length))
 
     return T.Compose(transforms)
 

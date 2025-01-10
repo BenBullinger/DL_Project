@@ -14,7 +14,8 @@ def get_default_config():
         "data":"PROTEINS",
         "epochs":10,
         "batch_size":32,
-        "laplacePE":3,
+        "laplacePE":0,
+        "RW_length":0,
         "hidden_channel":64,
         "layers":4,
         "heads":4,
@@ -82,9 +83,10 @@ def run_experiments(config_files):
 if __name__ == "__main__":
     # List of configuration files
     config_files = [
-        "data/configs/sample_config.json",
+        #"data/configs/sample_config.json",
         #"data/configs/sample_config2.json",
-        #"data/configs/sample_config3.json"
+        "data/configs/sample_config3.json",
+        #"data/configs/sample_config4.json"
         # Add more config files as needed
     ]
 
