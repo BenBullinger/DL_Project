@@ -1,17 +1,16 @@
 {
     "device": 0,
-    "model":"gamba",
+    "model":"gambaARSP",
     "readout": "add",
-    "data":"Peptides-func",
-    "epochs":240,
+    "data":"Peptides-struct",
+    "epochs":220,
     "batch_size":64,
     "laplacePE":4,
-    "RW_length":16,
     "hidden_channel":96,
-    "layers": 1,
+    "layers": 2,
     "weight_decay":0.01,
     "learning_rate": 4e-4,
-    "num_virtual_tokens": 8,
+    "num_virtual_tokens": 32,
     "add_virtual_node":false,
     "scheduler": "Plateau",
     "scheduler_patience": 12,
@@ -20,6 +19,6 @@
     "heads":1,
     "verbose": false,
     "simon_gaa": true,
-    "wandb": false,
-    "name": "simple-high-tokens"
+    "wandb": true,
+    "name": "ARSP struct not proba"
 }

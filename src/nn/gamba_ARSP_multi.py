@@ -7,13 +7,13 @@ from .gamba_PVOC_multi import SpatialConv
 from .mlp import get_mlp
 
 class MultiScaleARSPBlock(nn.Module):
-    def __init__(self, hidden_channels, num_virtual_tokens=4, num_attention_heads=4):
+    def __init__(self, hidden_channels, num_virtual_tokens=4, num_attention_heads=4, args=None):
         super().__init__()
         self.num_virtual_tokens = num_virtual_tokens
         # -- Multi-scale SpatialConvs (like GambaSP)
         spatial_convs = 3
         self.spatial_convs = nn.ModuleList([
-            SpatialConv(hidden_channels) for _ in range(spatial_convs)  # or however many scales you want
+            SpatialConv(hidden_channels, args) for _ in range(spatial_convs)  # or however many scales you want
         ])
         self.gated_gcn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
         
@@ -56,9 +56,10 @@ class MultiScaleARSPBlock(nn.Module):
             edge_attr: [E, num_edge_features]  (e.g. 2 if sobel + boundary)
             batch:     [N]  with batch indices
             """
+            #input(f"{x.shape}, {edge_attr.shape}")
             identity = x
             pe = self.gated_gcn(x, edge_index)
-            probabilistic = True
+            probabilistic = False
             #Spatial conv thing
             xs = []
             for conv in self.spatial_convs:
@@ -145,7 +146,8 @@ class GambaARSP(nn.Module):
             MultiScaleARSPBlock(
                 hidden_channels=hidden_channels,
                 num_virtual_tokens=num_virtual_tokens,
-                num_attention_heads=num_attention_heads
+                num_attention_heads=num_attention_heads,
+                args=args
             )
             for _ in range(layers)
         ])

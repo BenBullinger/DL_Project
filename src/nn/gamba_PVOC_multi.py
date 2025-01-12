@@ -10,14 +10,17 @@ from .mlp import get_mlp
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
 
 class SpatialConv(MessagePassing):
-    def __init__(self, hidden_channels):
+    def __init__(self, hidden_channels, args=None):
         super().__init__(aggr='add')
         # Separate projections for edge features
+        self.args = args
+        
         self.sobel_proj = nn.Linear(1, hidden_channels)  # Sobel filter values
         self.boundary_proj = nn.Linear(1, hidden_channels)  # Boundary counts
-        
+        edge_dim = 0 if args.data == "PascalVOC-SP" else hidden_channels 
+        assert(args.data == "PascalVOC-SP" or edge_dim==hidden_channels)
         self.node_mlp = get_mlp(
-            input_dim=hidden_channels * 2,  # node_i + node_j
+            input_dim=hidden_channels * 2 + edge_dim,  # node_i + node_j (+ edge_dim if not pascal)
             hidden_dim=hidden_channels,
             output_dim=hidden_channels,
             mlp_depth=1,
@@ -32,33 +35,38 @@ class SpatialConv(MessagePassing):
         
     def message(self, x_i, x_j, edge_attr):
         # Split edge features
-        sobel_values = edge_attr[:, 0:1]  # Sobel filter values
-        boundary_counts = edge_attr[:, 1:2]  # Boundary pixel counts
+        if self.args.data == "PascalVOC-SP":
+            sobel_values = edge_attr[:, 0:1]  # Sobel filter values
+            boundary_counts = edge_attr[:, 1:2]  # Boundary pixel counts
         
-        # Process node features
-        node_features = self.node_mlp(torch.cat([x_i, x_j], dim=-1))
-        
-        # Process edge features
-        sobel_weights = self.sobel_proj(sobel_values)  # Edge intensity
-        boundary_weights = self.boundary_proj(boundary_counts)  # Boundary strength
-        
-        # Combine all information
-        # Higher boundary count and Sobel values indicate stronger connections
-        edge_importance = torch.sigmoid(sobel_weights + boundary_weights)
-        
-        return node_features * edge_importance
+            # Process node features
+            node_features = self.node_mlp(torch.cat([x_i, x_j], dim=-1))
+            
+            # Process edge features
+            sobel_weights = self.sobel_proj(sobel_values)  # Edge intensity
+            boundary_weights = self.boundary_proj(boundary_counts)  # Boundary strength
+            
+            # Combine all information
+            # Higher boundary count and Sobel values indicate stronger connections
+            edge_importance = torch.sigmoid(sobel_weights + boundary_weights)
+            
+            return node_features * edge_importance
 
+        else:
+            torch.cat([x_i, x_j, edge_attr], dim=1).shape
+            return self.node_mlp(torch.cat([x_i, x_j, edge_attr], dim=1))
+        
     def update(self, aggr_out, x):
         # Residual connection and normalization
         return self.final_norm(x + aggr_out)
 
 class MultiScaleGambaLayer(nn.Module):
-    def __init__(self, hidden_channels, num_virtual_tokens):
+    def __init__(self, hidden_channels, num_virtual_tokens, args=None):
         super().__init__()
         # Local spatial processing at different scales
-        self.spatial_convs = nn.ModuleList([
-            SpatialConv(hidden_channels) for _ in range(8)  # 3 scales
-        ])
+        self.spatial_convs = 4
+        self.spatial_conv = SpatialConv(hidden_channels, args)  # 3 scales
+
         
         self.h_weight = get_mlp(input_dim=hidden_channels, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=4, normalization=nn.Identity, last_relu=True)
         # Global processing with Mamba
@@ -80,7 +88,7 @@ class MultiScaleGambaLayer(nn.Module):
         
         # Merge multi-scale features
         self.merge = get_mlp(
-            input_dim=hidden_channels * 9,  # 3 scales + mamba
+            input_dim=hidden_channels * 2,  # 3 scales + mamba
             hidden_dim=hidden_channels,
             output_dim=hidden_channels,
             mlp_depth=1,
@@ -92,12 +100,15 @@ class MultiScaleGambaLayer(nn.Module):
         
     def forward(self, x, edge_index, edge_attr, batch, **kwargs):
         identity = x
-        
+        pe = x
+        for _ in range(self.spatial_convs):
+            pe = self.spatial_conv(pe, edge_index, edge_attr)        
         # Multi-scale spatial processing
+        """
         xs = []
         for conv in self.spatial_convs:
             xs.append(conv(x, edge_index, edge_attr))
-        
+        """
         # Global processing
         #x_h = self.h_weight(x)
         x_dense, mask = to_dense_batch(x, batch)
@@ -107,7 +118,7 @@ class MultiScaleGambaLayer(nn.Module):
         x_m = x_mamba[batch][:,-1,:]  # Use last token
         
         # Merge all features
-        x = self.merge(torch.cat([*xs, x_m], dim=-1))
+        x = self.merge(torch.cat([pe, x_m], dim=-1))
         
         # Residual connection and normalization
         x = self.layer_norm(x + identity)
@@ -151,7 +162,7 @@ class GambaSP(nn.Module):
         
         # Multi-scale Gamba layers
         self.layers = nn.ModuleList([
-            MultiScaleGambaLayer(hidden_channels, num_virtual_tokens)
+            MultiScaleGambaLayer(hidden_channels, num_virtual_tokens, args)
             for _ in range(layers)
         ])
         

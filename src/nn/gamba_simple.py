@@ -68,8 +68,8 @@ class Gamba(nn.Module):
         if self.enc is not None:
             x = self.enc(x)
         x_orig =x
-        pe = torch.cat([lpe, rwse], dim=1)
-        #pe = self.pe_gnn(x, edge_index)
+        #pe = torch.cat([lpe, rwse], dim=1)
+        pe = self.pe_gnn(x, edge_index)
         #x = self.input_gin(x, edge_index)
 
         x = torch.cat([x, pe], dim=1)

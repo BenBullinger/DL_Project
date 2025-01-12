@@ -83,9 +83,9 @@ def run_experiments(config_files):
 if __name__ == "__main__":
     # List of configuration files
     config_files = [
-        #"data/configs/sample_config.json",
+        "data/configs/sample_config.json",
         #"data/configs/sample_config2.json",
-        "data/configs/sample_config3.json",
+        #"data/configs/sample_config3.json",
         #"data/configs/sample_config4.json"
         # Add more config files as needed
     ]

@@ -251,7 +251,8 @@ def evaluate_mae(model, val_loader, args, atom_encoder=None, bond_encoder=None):
             # Apply atom_encoder if provided
             if atom_encoder is not None:
                 batch = atom_encoder(batch)
-
+            if bond_encoder is not None:
+                batch = bond_encoder(batch)
             # Forward pass
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
