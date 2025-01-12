@@ -1,4 +1,4 @@
-# Project name
+# 🦐 Gamba: Scalable Attention Based Graph-to-Sequence Modeling
 
 The pdf for the whole report/paper will be there
 
@@ -25,5 +25,11 @@ To run an experiment, use the following command:
 python start.py --config data/configs/sample_config.json
 ```
 
+#### Using Google Colab:
+
+The experiments can also be run on Google Colab GPUs using the `google_colab.ipynb` notebook. 
+
+The notebook requires that this repository is installed into `/content/drive/MyDrive/DL_Project/DL_Project/`.
+
 ### Societal impact:
-Too many mambas might collapse the ecosystem.
+Too many gambas might collapse the ecosystem.
