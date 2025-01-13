@@ -44,6 +44,7 @@ def run_experiments(config_files):
     # Initialize wandb once before the loop
     if get_default_config()["wandb"]:
         wandb.init(
+            entity="astinky",
             project="DL_Project",
             config=args.__dict__,
             name=args.name
