@@ -3,7 +3,7 @@
     "model":"gambaARSP",
     "readout": "add",
     "data":"Peptides-struct",
-    "epochs":2,
+    "epochs":21,
     "batch_size":64,
     "laplacePE":4,
     "hidden_channel":8,
