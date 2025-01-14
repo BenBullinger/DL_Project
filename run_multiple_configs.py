@@ -137,8 +137,23 @@ def run_experiments(config_files, num_trials=3):
                 })
 
             # Create and log a wandb Table with all results
-            wandb_table = wandb.Table(dataframe=df)
-            wandb.log({"results_table": wandb_table})
+            columns = ["Model", "Trial", "Train_Loss", "Train_Accuracy", "Val_Loss", "Val_Accuracy", "Test_Loss", "Test_Accuracy"]
+            wandb_table = wandb.Table(columns=columns)
+            
+            for _, row in df.iterrows():
+                wandb_table.add_data(
+                    row["Model"],
+                    row["Trial"],
+                    row["Train_Loss"],
+                    row["Train_Accuracy"],
+                    row["Val_Loss"],
+                    row["Val_Accuracy"],
+                    row["Test_Loss"],
+                    row["Test_Accuracy"]
+                )
+            
+            # Log the table with a specific title
+            wandb.log({"experiment_results": wandb_table}, step=0)
 
             wandb_run.finish()
 
