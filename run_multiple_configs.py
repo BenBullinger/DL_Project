@@ -99,13 +99,31 @@ def run_experiments(config_files, num_trials=3):
             'Test_Accuracy': ['mean', 'std']
         }).round(4)
         
+        # Create a new DataFrame with the "mean ± std" format
+        formatted_stats = pd.DataFrame(index=stats.index)
+        for metric in ['Train_Loss', 'Train_Accuracy', 'Val_Loss', 'Val_Accuracy', 'Test_Loss', 'Test_Accuracy']:
+            formatted_stats[metric] = (
+                stats[metric]['mean'].astype(str) + ' ± ' + 
+                stats[metric]['std'].astype(str)
+            )
+        
         print("\nResults per run:")
         print(df.to_markdown(index=False))
         
         print("\nStatistics per model:")
-        print(stats.to_markdown(floatfmt='.4f'))
+        print(formatted_stats.to_markdown(floatfmt='.4f'))
 
-        # Log results to wandb
+        # Save results to CSV files
+        output_dir = "results"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save individual runs
+        df.to_csv(os.path.join(output_dir, "individual_runs.csv"), index=False)
+        
+        # Save summary statistics
+        formatted_stats.to_csv(os.path.join(output_dir, "summary_statistics.csv"))
+
+        # Log other metrics to wandb if enabled
         if wandb_run is not None:
             # Log individual runs
             for _, row in df.iterrows():
@@ -137,25 +155,6 @@ def run_experiments(config_files, num_trials=3):
                     "aggregate_stats/test_accuracy_mean": stats.loc[model, ('Test_Accuracy', 'mean')],
                     "aggregate_stats/test_accuracy_std": stats.loc[model, ('Test_Accuracy', 'std')]
                 })
-
-            # Create and log a wandb Table with all results
-            columns = ["Model", "Trial", "Train_Loss", "Train_Accuracy", "Val_Loss", "Val_Accuracy", "Test_Loss", "Test_Accuracy"]
-            wandb_table = wandb.Table(columns=columns)
-            
-            for _, row in df.iterrows():
-                wandb_table.add_data(
-                    row["Model"],
-                    row["Trial"],
-                    row["Train_Loss"],
-                    row["Train_Accuracy"],
-                    row["Val_Loss"],
-                    row["Val_Accuracy"],
-                    row["Test_Loss"],
-                    row["Test_Accuracy"]
-                )
-            
-            # Log the table with a specific title
-            wandb.log({"experiment_results": wandb_table}, step=0)
 
             wandb_run.finish()
 
