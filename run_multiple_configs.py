@@ -38,7 +38,7 @@ def get_default_config():
         "patience": 20
     }
 
-def run_experiments(config_files):
+def run_experiments(config_files, num_trials=3):
     results = []
 
     # Initialize wandb once before the loop
@@ -55,27 +55,43 @@ def run_experiments(config_files):
         with open(config_file, 'r') as f:
             config = json.load(f)
         
-        # Start with default config and update with file-specific settings
-        full_config = get_default_config()
-        full_config.update(config)
+        # Run multiple trials for each config
+        for trial in range(num_trials):
+            # Start with default config and update with file-specific settings
+            full_config = get_default_config()
+            full_config.update(config)
+            
+            # Update seed for each trial to ensure different random initializations
+            full_config["seed"] = trial
 
-        # Convert config to argparse.Namespace
-        args = argparse.Namespace(**full_config)
+            # Convert config to argparse.Namespace
+            args = argparse.Namespace(**full_config)
 
-        # Run training and evaluation
-        val_loss, val_accuracy = train_and_eval(args)
+            # Run training and evaluation
+            val_loss, val_accuracy = train_and_eval(args)
 
-        # Collect results
-        results.append({
-            "Model": config["name"],
-            "Loss": f"{val_loss:.4f}",
-            "Accuracy": f"{val_accuracy:.4f}"
-        })
+            # Collect results
+            results.append({
+                "Model": config["name"],
+                "Trial": trial + 1,
+                "Loss": float(val_loss),
+                "Accuracy": float(val_accuracy)
+            })
 
     # Create a DataFrame for better visualization
     df = pd.DataFrame(results)
-    print("\nResults:")
+    
+    # Calculate statistics per model
+    stats = df.groupby('Model').agg({
+        'Loss': ['mean', 'std'],
+        'Accuracy': ['mean', 'std']
+    }).round(4)
+    
+    print("\nResults per run:")
     print(df.to_markdown(index=False))
+    
+    print("\nStatistics per model:")
+    print(stats.to_markdown(floatfmt='.4f'))
 
     # Close wandb run
     if get_default_config()["wandb"]:
@@ -84,11 +100,10 @@ def run_experiments(config_files):
 if __name__ == "__main__":
     # List of configuration files
     config_files = [
-        "data/configs/archived_configs/6h_run.json",
+        "data/configs/archived_configs/stats_test.json",
         #"data/configs/sample_config2.json",
         #"data/configs/sample_config3.json",
         #"data/configs/sample_config4.json"
-        # Add more config files as needed
     ]
 
-    run_experiments(config_files) 
+    run_experiments(config_files, num_trials=3) 
