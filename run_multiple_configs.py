@@ -41,7 +41,7 @@ def get_default_config():
     }
 
 def run_experiments(config_files, num_trials=3):
-    results = []
+    all_results = []
 
     # Initialize wandb once before the loop
     wandb_run = None
@@ -55,6 +55,7 @@ def run_experiments(config_files, num_trials=3):
 
     try:
         for config_file in config_files:
+            results = []  # Results for current config
             # Load the configuration
             with open(config_file, 'r') as f:
                 config = json.load(f)
@@ -86,80 +87,41 @@ def run_experiments(config_files, num_trials=3):
                     "Test_Accuracy": float(test_acc)
                 })
 
-        # Create a DataFrame for better visualization
-        df = pd.DataFrame(results)
-        
-        # Calculate statistics per model
-        stats = df.groupby('Model').agg({
-            'Train_Loss': ['mean', 'std'],
-            'Train_Accuracy': ['mean', 'std'],
-            'Val_Loss': ['mean', 'std'],
-            'Val_Accuracy': ['mean', 'std'],
-            'Test_Loss': ['mean', 'std'],
-            'Test_Accuracy': ['mean', 'std']
-        }).round(4)
-        
-        # Create a new DataFrame with the "mean ± std" format
-        formatted_stats = pd.DataFrame(index=stats.index)
-        for metric in ['Train_Loss', 'Train_Accuracy', 'Val_Loss', 'Val_Accuracy', 'Test_Loss', 'Test_Accuracy']:
-            formatted_stats[metric] = (
-                stats[metric]['mean'].astype(str) + ' ± ' + 
-                stats[metric]['std'].astype(str)
-            )
-        
-        print("\nResults per run:")
-        print(df.to_markdown(index=False))
-        
-        print("\nStatistics per model:")
-        print(formatted_stats.to_markdown(floatfmt='.4f'))
-
-        # Save results to CSV files
-        output_dir = "results"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Save individual runs
-        df.to_csv(os.path.join(output_dir, "individual_runs.csv"), index=False)
-        
-        # Save summary statistics
-        formatted_stats.to_csv(os.path.join(output_dir, "summary_statistics.csv"))
-
-        # Log other metrics to wandb if enabled
-        if wandb_run is not None:
-            # Log individual runs
-            for _, row in df.iterrows():
-                wandb.log({
-                    "individual_runs/model": row["Model"],
-                    "individual_runs/trial": row["Trial"],
-                    "individual_runs/train_loss": row["Train_Loss"],
-                    "individual_runs/train_accuracy": row["Train_Accuracy"],
-                    "individual_runs/val_loss": row["Val_Loss"],
-                    "individual_runs/val_accuracy": row["Val_Accuracy"],
-                    "individual_runs/test_loss": row["Test_Loss"],
-                    "individual_runs/test_accuracy": row["Test_Accuracy"]
-                })
+            # Create a DataFrame for current config results
+            df = pd.DataFrame(results)
             
-            # Log aggregate statistics
-            for model in stats.index:
-                wandb.log({
-                    "aggregate_stats/model": model,
-                    "aggregate_stats/train_loss_mean": stats.loc[model, ('Train_Loss', 'mean')],
-                    "aggregate_stats/train_loss_std": stats.loc[model, ('Train_Loss', 'std')],
-                    "aggregate_stats/train_accuracy_mean": stats.loc[model, ('Train_Accuracy', 'mean')],
-                    "aggregate_stats/train_accuracy_std": stats.loc[model, ('Train_Accuracy', 'std')],
-                    "aggregate_stats/val_loss_mean": stats.loc[model, ('Val_Loss', 'mean')],
-                    "aggregate_stats/val_loss_std": stats.loc[model, ('Val_Loss', 'std')],
-                    "aggregate_stats/val_accuracy_mean": stats.loc[model, ('Val_Accuracy', 'mean')],
-                    "aggregate_stats/val_accuracy_std": stats.loc[model, ('Val_Accuracy', 'std')],
-                    "aggregate_stats/test_loss_mean": stats.loc[model, ('Test_Loss', 'mean')],
-                    "aggregate_stats/test_loss_std": stats.loc[model, ('Test_Loss', 'std')],
-                    "aggregate_stats/test_accuracy_mean": stats.loc[model, ('Test_Accuracy', 'mean')],
-                    "aggregate_stats/test_accuracy_std": stats.loc[model, ('Test_Accuracy', 'std')]
-                })
+            # Calculate statistics
+            stats = df.groupby('Model').agg({
+                'Train_Loss': ['mean', 'std'],
+                'Train_Accuracy': ['mean', 'std'],
+                'Val_Loss': ['mean', 'std'],
+                'Val_Accuracy': ['mean', 'std'],
+                'Test_Loss': ['mean', 'std'],
+                'Test_Accuracy': ['mean', 'std']
+            }).round(4)
+            
+            # Create formatted stats
+            formatted_stats = pd.DataFrame(index=stats.index)
+            for metric in ['Train_Loss', 'Train_Accuracy', 'Val_Loss', 'Val_Accuracy', 'Test_Loss', 'Test_Accuracy']:
+                formatted_stats[metric] = (
+                    stats[metric]['mean'].astype(str) + ' ± ' + 
+                    stats[metric]['std'].astype(str)
+                )
+            
+            # Print results for current config
+            print(f"\nResults for {config['name']}:")
+            print(df.to_markdown(index=False))
+            print("\nStatistics:")
+            print(formatted_stats.to_markdown(floatfmt='.4f'))
 
-            wandb_run.finish()
+            # Save results for current config
+            output_dir = "results"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            df.to_csv(os.path.join(output_dir, f"{config['name']}_individual_runs.csv"), index=False)
+            formatted_stats.to_csv(os.path.join(output_dir, f"{config['name']}_summary_statistics.csv"))
 
     finally:
-        # Ensure wandb run is finished even if there's an error
         if wandb_run is not None and wandb_run.state != 'finished':
             wandb_run.finish()
 

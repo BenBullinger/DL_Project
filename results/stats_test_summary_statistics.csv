@@ -1,0 +1,2 @@
+Model,Train_Loss,Train_Accuracy,Val_Loss,Val_Accuracy,Test_Loss,Test_Accuracy
+stats_test,0.5676 ± 0.0615,0.4517 ± 0.038,0.5287 ± 0.0594,0.4478 ± 0.0377,0.5546 ± 0.0621,0.4543 ± 0.0384
