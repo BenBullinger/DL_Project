@@ -35,7 +35,44 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
-def initialize_model(args, task_info):
+@timer
+def train_and_eval(args):
+    if args.verbose:
+        print("Running with the following arguments:")
+        print(json.dumps(args.__dict__, indent=2))
+
+    wandb_run = None
+    if args.wandb:
+        if(hasattr(args, "name")):
+            naming = args.name
+        else:
+            naming = f"{args.model}_{args.data}"
+
+        wandb_run = wandb.init(
+            entity="astinky",
+            project="DL_Project",
+            config=args.__dict__,
+            name=naming
+        )
+        
+        # add Git hash to the run
+        try:
+            git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+            wandb.config.update(args.__dict__, allow_val_change=True)
+            print(f"Logged Git hash: {git_hash}")
+        except subprocess.CalledProcessError as e:
+            print("Error retrieving Git hash. Make sure you are in a Git repository.", e)
+
+    seed_everything(args.seed)
+
+    device = args.device
+    
+    train_loader, val_loader, test_loader, task_info = load_data(args)
+    atom_encoder = AtomEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
+    bond_encoder = BondEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
+    task_info["node_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["node_feature_dims"]
+    task_info["edge_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["edge_feature_dims"]
+
     if args.model == "gin":
         model = GIN(
             in_channels=task_info["node_feature_dims"],
@@ -147,49 +184,13 @@ def initialize_model(args, task_info):
                 use_dec=True,
                 args=args,
                 use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
-            )
+            ).to(device)
+    results = train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, bond_encoder=bond_encoder, args=args)
     
-    return model
-
-@timer
-def train_and_eval(args):
-    if args.verbose:
-        print("Running with the following arguments:")
-        print(json.dumps(args.__dict__, indent=2))
-
-    if args.wandb:
-        if(hasattr(args, "name")):
-            naming = args.name
-        else:
-            naming = f"{args.model}_{args.data}"
-
-        wandb.init(
-            entity="astinky",
-            project="DL_Project",
-            config=args.__dict__,
-            name=naming
-        )
+    if wandb_run is not None:
+        wandb_run.finish()
         
-        # add Git hash to the run
-        try:
-            git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-            wandb.config.update(args.__dict__, allow_val_change=True)
-            print(f"Logged Git hash: {git_hash}")
-        except subprocess.CalledProcessError as e:
-            print("Error retrieving Git hash. Make sure you are in a Git repository.", e)
-
-    seed_everything(args.seed)
-
-    device = args.device
-    
-    train_loader, val_loader, test_loader, task_info = load_data(args)
-    atom_encoder = AtomEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
-    bond_encoder = BondEncoder(emb_dim=args.hidden_channel).to(device) if task_info["needs_ogb_encoder"] else None
-    task_info["node_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["node_feature_dims"]
-    task_info["edge_feature_dims"] = args.hidden_channel if task_info["needs_ogb_encoder"] else task_info["edge_feature_dims"]
-
-    model = initialize_model(args, task_info).to(device)
-    return train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, bond_encoder=bond_encoder, args=args)
+    return results
 
 
 def get_hyperparameter_space(model_name):
@@ -325,7 +326,11 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, bond_encod
                 )
     wandb.finish()
     if val_loader is not None:
-        return evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        # Return metrics for all three splits
+        train_loss, train_report = evaluate(model, train_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        test_loss, test_report = evaluate(model, test_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        return train_loss, train_report, val_loss, val_report, test_loss, test_report
 
 def evaluate(model, val_loader, args, atom_encoder, bond_encoder):
     report_metric = metrics.report_metric_dict[args.data]

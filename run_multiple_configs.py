@@ -44,83 +44,110 @@ def run_experiments(config_files, num_trials=3):
     results = []
 
     # Initialize wandb once before the loop
+    wandb_run = None
     if get_default_config()["wandb"]:
-        wandb.init(
+        wandb_run = wandb.init(
             entity="astinky",
             project="DL_Project",
             config=args.__dict__,
             name=args.name
         )
 
-    for config_file in config_files:
-        # Load the configuration
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-        
-        # Run multiple trials for each config
-        for trial in range(num_trials):
-            # Start with default config and update with file-specific settings
-            full_config = get_default_config()
-            full_config.update(config)
+    try:
+        for config_file in config_files:
+            # Load the configuration
+            with open(config_file, 'r') as f:
+                config = json.load(f)
             
-            # Update seed for each trial to ensure different random initializations
-            full_config["seed"] = trial
+            # Run multiple trials for each config
+            for trial in range(num_trials):
+                # Start with default config and update with file-specific settings
+                full_config = get_default_config()
+                full_config.update(config)
+                
+                # Update seed for each trial to ensure different random initializations
+                full_config["seed"] = trial
 
-            # Convert config to argparse.Namespace
-            args = argparse.Namespace(**full_config)
+                # Convert config to argparse.Namespace
+                args = argparse.Namespace(**full_config)
 
-            # Run training and evaluation
-            val_loss, val_accuracy = train_and_eval(args)
+                # Run training and evaluation
+                train_loss, train_acc, val_loss, val_acc, test_loss, test_acc = train_and_eval(args)
 
-            # Collect results
-            results.append({
-                "Model": config["name"],
-                "Trial": trial + 1,
-                "Loss": float(val_loss),
-                "Accuracy": float(val_accuracy)
-            })
+                # Collect results
+                results.append({
+                    "Model": config["name"],
+                    "Trial": trial + 1,
+                    "Train_Loss": float(train_loss),
+                    "Train_Accuracy": float(train_acc),
+                    "Val_Loss": float(val_loss),
+                    "Val_Accuracy": float(val_acc),
+                    "Test_Loss": float(test_loss),
+                    "Test_Accuracy": float(test_acc)
+                })
 
-    # Create a DataFrame for better visualization
-    df = pd.DataFrame(results)
-    
-    # Calculate statistics per model
-    stats = df.groupby('Model').agg({
-        'Loss': ['mean', 'std'],
-        'Accuracy': ['mean', 'std']
-    }).round(4)
-    
-    print("\nResults per run:")
-    print(df.to_markdown(index=False))
-    
-    print("\nStatistics per model:")
-    print(stats.to_markdown(floatfmt='.4f'))
-
-    # Log results to wandb
-    if get_default_config()["wandb"]:
-        # Log individual runs
-        for _, row in df.iterrows():
-            wandb.log({
-                "individual_runs/model": row["Model"],
-                "individual_runs/trial": row["Trial"],
-                "individual_runs/loss": row["Loss"],
-                "individual_runs/accuracy": row["Accuracy"]
-            })
+        # Create a DataFrame for better visualization
+        df = pd.DataFrame(results)
         
-        # Log aggregate statistics
-        for model in stats.index:
-            wandb.log({
-                "aggregate_stats/model": model,
-                "aggregate_stats/loss_mean": stats.loc[model, ('Loss', 'mean')],
-                "aggregate_stats/loss_std": stats.loc[model, ('Loss', 'std')],
-                "aggregate_stats/accuracy_mean": stats.loc[model, ('Accuracy', 'mean')],
-                "aggregate_stats/accuracy_std": stats.loc[model, ('Accuracy', 'std')]
-            })
+        # Calculate statistics per model
+        stats = df.groupby('Model').agg({
+            'Train_Loss': ['mean', 'std'],
+            'Train_Accuracy': ['mean', 'std'],
+            'Val_Loss': ['mean', 'std'],
+            'Val_Accuracy': ['mean', 'std'],
+            'Test_Loss': ['mean', 'std'],
+            'Test_Accuracy': ['mean', 'std']
+        }).round(4)
+        
+        print("\nResults per run:")
+        print(df.to_markdown(index=False))
+        
+        print("\nStatistics per model:")
+        print(stats.to_markdown(floatfmt='.4f'))
 
-        # Create and log a wandb Table with all results
-        wandb_table = wandb.Table(dataframe=df)
-        wandb.log({"results_table": wandb_table})
+        # Log results to wandb
+        if wandb_run is not None:
+            # Log individual runs
+            for _, row in df.iterrows():
+                wandb.log({
+                    "individual_runs/model": row["Model"],
+                    "individual_runs/trial": row["Trial"],
+                    "individual_runs/train_loss": row["Train_Loss"],
+                    "individual_runs/train_accuracy": row["Train_Accuracy"],
+                    "individual_runs/val_loss": row["Val_Loss"],
+                    "individual_runs/val_accuracy": row["Val_Accuracy"],
+                    "individual_runs/test_loss": row["Test_Loss"],
+                    "individual_runs/test_accuracy": row["Test_Accuracy"]
+                })
+            
+            # Log aggregate statistics
+            for model in stats.index:
+                wandb.log({
+                    "aggregate_stats/model": model,
+                    "aggregate_stats/train_loss_mean": stats.loc[model, ('Train_Loss', 'mean')],
+                    "aggregate_stats/train_loss_std": stats.loc[model, ('Train_Loss', 'std')],
+                    "aggregate_stats/train_accuracy_mean": stats.loc[model, ('Train_Accuracy', 'mean')],
+                    "aggregate_stats/train_accuracy_std": stats.loc[model, ('Train_Accuracy', 'std')],
+                    "aggregate_stats/val_loss_mean": stats.loc[model, ('Val_Loss', 'mean')],
+                    "aggregate_stats/val_loss_std": stats.loc[model, ('Val_Loss', 'std')],
+                    "aggregate_stats/val_accuracy_mean": stats.loc[model, ('Val_Accuracy', 'mean')],
+                    "aggregate_stats/val_accuracy_std": stats.loc[model, ('Val_Accuracy', 'std')],
+                    "aggregate_stats/test_loss_mean": stats.loc[model, ('Test_Loss', 'mean')],
+                    "aggregate_stats/test_loss_std": stats.loc[model, ('Test_Loss', 'std')],
+                    "aggregate_stats/test_accuracy_mean": stats.loc[model, ('Test_Accuracy', 'mean')],
+                    "aggregate_stats/test_accuracy_std": stats.loc[model, ('Test_Accuracy', 'std')]
+                })
 
-        wandb.finish()
+            # Create and log a wandb Table with all results
+            wandb_table = wandb.Table(dataframe=df)
+            wandb.log({"results_table": wandb_table})
+
+            wandb_run.finish()
+
+    finally:
+        # Ensure wandb run is finished even if there's an error
+        if wandb_run is not None and wandb_run.state != 'finished':
+            wandb_run.finish()
 
 if __name__ == "__main__":
     # List of configuration files
