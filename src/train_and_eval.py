@@ -45,6 +45,7 @@ def train_and_eval(args):
             naming = f"{args.model}_{args.data}"
 
         wandb.init(
+            entity="astinky",
             project="DL_Project",
             config=args.__dict__,
             name=naming

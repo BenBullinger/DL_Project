@@ -93,8 +93,31 @@ def run_experiments(config_files, num_trials=3):
     print("\nStatistics per model:")
     print(stats.to_markdown(floatfmt='.4f'))
 
-    # Close wandb run
+    # Log results to wandb
     if get_default_config()["wandb"]:
+        # Log individual runs
+        for _, row in df.iterrows():
+            wandb.log({
+                "individual_runs/model": row["Model"],
+                "individual_runs/trial": row["Trial"],
+                "individual_runs/loss": row["Loss"],
+                "individual_runs/accuracy": row["Accuracy"]
+            })
+        
+        # Log aggregate statistics
+        for model in stats.index:
+            wandb.log({
+                "aggregate_stats/model": model,
+                "aggregate_stats/loss_mean": stats.loc[model, ('Loss', 'mean')],
+                "aggregate_stats/loss_std": stats.loc[model, ('Loss', 'std')],
+                "aggregate_stats/accuracy_mean": stats.loc[model, ('Accuracy', 'mean')],
+                "aggregate_stats/accuracy_std": stats.loc[model, ('Accuracy', 'std')]
+            })
+
+        # Create and log a wandb Table with all results
+        wandb_table = wandb.Table(dataframe=df)
+        wandb.log({"results_table": wandb_table})
+
         wandb.finish()
 
 if __name__ == "__main__":
