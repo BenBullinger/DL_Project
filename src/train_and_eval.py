@@ -38,13 +38,14 @@ def train_and_eval(args):
         print("Running with the following arguments:")
         print(json.dumps(args.__dict__, indent=2))
 
+    wandb_run = None
     if args.wandb:
         if(hasattr(args, "name")):
             naming = args.name
         else:
             naming = f"{args.model}_{args.data}"
 
-        wandb.init(
+        wandb_run = wandb.init(
             entity="astinky",
             project="DL_Project",
             config=args.__dict__,
@@ -181,7 +182,12 @@ def train_and_eval(args):
                 args=args,
                 use_readout=args.readout if task_info["task_type"] == "graph_prediction" else None
             ).to(device)
-    return train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, bond_encoder=bond_encoder, args=args)
+    results = train(model, train_loader, val_loader, test_loader, atom_encoder=atom_encoder, bond_encoder=bond_encoder, args=args)
+    
+    if wandb_run is not None:
+        wandb_run.finish()
+        
+    return results
 
 
 def get_hyperparameter_space(model_name):
@@ -317,7 +323,11 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, bond_encod
                 )
     wandb.finish()
     if val_loader is not None:
-        return evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        # Return metrics for all three splits
+        train_loss, train_report = evaluate(model, train_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        val_loss, val_report = evaluate(model, val_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        test_loss, test_report = evaluate(model, test_loader, args, atom_encoder=atom_encoder, bond_encoder=bond_encoder)
+        return train_loss, train_report, val_loss, val_report, test_loss, test_report
 
 def evaluate(model, val_loader, args, atom_encoder, bond_encoder):
     report_metric = metrics.report_metric_dict[args.data]
