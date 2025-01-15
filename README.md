@@ -22,17 +22,33 @@ This is a short introduciton how to run things:
 To run wandb logging, add your API key to `wandb.key`. (Wandb logging is currently unimplemented)
 
 ### Running Experiments:
-To run an experiment, use the following command:
+
+To run experiments run the python file
 
 ```bash
-python start.py --config data/configs/sample_config.json
+python run_multiple_configs.py
 ```
+
+after specifying the config files of the experiments to run in its main function
+
+```python3
+if __name__ == "__main__":
+    # List of configuration files
+    config_files = [
+        "data/configs/[config_name_1].json",
+        "data/configs/[config_name_2].json",
+        ...
+    ]
+
+    run_experiments(config_files, num_trials=3) 
+```
+
+Each experiment is repeated with different random seeds for `num_trials` trials. The results and aggregate statistics (mean and standard deviation) across the experimental trials are saved to the `results` directory.
+
 
 #### Using Google Colab:
 
-The experiments can also be run on Google Colab GPUs using the `google_colab.ipynb` notebook. 
-
-The notebook requires that this repository is installed into `/content/drive/MyDrive/DL_Project/DL_Project/`.
+To easily make use of Google Colab GPUs we provide the notebook `google_colab.ipynb`. It allows to run experiments directly from a Google Colab GPU environment. It requires that this repository is installed into `/content/drive/MyDrive/DL_Project/DL_Project/`.
 
 ### Societal impact:
 Too many gambas might collapse the ecosystem.
