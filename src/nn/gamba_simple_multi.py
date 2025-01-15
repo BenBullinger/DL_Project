@@ -36,17 +36,19 @@ class GambaMulti(nn.Module):
         
         self.input_gin = GINConv(get_mlp(input_dim=first_gin_dim, hidden_dim=hidden_channels, mlp_depth=mlp_depth, output_dim=hidden_channels, normalization=torch.nn.LayerNorm, last_relu=False), train_eps=True)
         
-        self.pe_gnn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
-
+        pe_dim = hidden_channels if args.pe == "gnn" else args.laplacePE + args.RW_length
+        if args.pe == "gnn":
+            self.pe_gnn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
+        
         self.theta_layers = nn.ModuleList([
-            nn.Linear(hidden_channels*2, num_virtual_tokens, bias=False)
+            nn.Linear(hidden_channels + pe_dim, num_virtual_tokens, bias=False)
             for _ in range(layers)
         ])
         
         # Configure Mamba
         
         self.mamba_layers = nn.ModuleList([
-            Mamba(d_model = hidden_channels*2,d_state = 128,d_conv = 4,expand = 2)
+            Mamba(d_model = hidden_channels + pe_dim, d_state = 128,d_conv = 4,expand = 2)
             for _ in range(layers)
         ])
 
@@ -54,7 +56,7 @@ class GambaMulti(nn.Module):
  
         self.merge_layers = nn.ModuleList([
             get_mlp(
-                input_dim=hidden_channels * 3, hidden_dim=hidden_channels,
+                input_dim=hidden_channels * 2 + pe_dim, hidden_dim=hidden_channels,
                 output_dim=hidden_channels, mlp_depth=1,
                 normalization=torch.nn.LayerNorm, last_relu=False
             )
@@ -87,14 +89,24 @@ class GambaMulti(nn.Module):
             x = torch.cat([x, pe], dim=1)
 
             x_dense, mask = to_dense_batch(x, batch)
-            alpha = torch.sigmoid(self.theta_layers[i](x_dense))
-            #tokens = alpha.transpose(1,2) @ x_dense
-
-            #mask = torch.bernoulli(alpha)
-            mask = top_k_mask(alpha=alpha, k=1)
-            #mask = (alpha > 0.7).float()
-            tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
-            x_mamba = self.mamba_layers[i](tokens)
+            alpha = self.theta(x_dense)
+            if self.args.regularization == "attention":
+                inv_sqrt_d = self.args.hidden_channel ** -0.5
+                alpha = torch.softmax(inv_sqrt_d * alpha, dim=1)            
+                alpha_X = alpha.transpose(1,2) @ x_dense
+                x_mamba = self.mamba(alpha_X)            
+            elif self.args.regularization == "probabilistic":
+                alpha = torch.sigmoid(alpha)
+                mask = torch.bernoulli(alpha)
+                tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
+                x_mamba = self.mamba(tokens)
+            elif self.args.regularization == "top-k":
+                mask = top_k_mask(alpha=alpha, k=1)
+                tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
+                x_mamba = self.mamba(tokens)
+            else:
+                alpha_X = alpha.transpose(1,2) @ x_dense
+                x_mamba = self.mamba(alpha_X)
             x_mamba = self.layer_norm_mamba(x_mamba)
             
             x_m = x_mamba[batch]

@@ -10,10 +10,12 @@ def get_default_config():
     return {
         "device": "cpu",
         "model":"gamba",
+        "regularization":"simple",
         "readout": "add",
         "data":"PROTEINS",
         "epochs":10,
         "batch_size":32,
+        "pe":"gnn",
         "laplacePE":0,
         "RW_length":0,
         "hidden_channel":64,
@@ -84,6 +86,8 @@ if __name__ == "__main__":
     # List of configuration files
     config_files = [
         "data/configs/sample_config.json",
+        #"data/configs/sample_config2.json",
+        #"data/configs/sample_config.json",
         #"data/configs/sample_config2.json",
         #"data/configs/sample_config3.json",
         #"data/configs/sample_config4.json"

@@ -36,7 +36,8 @@ def preprocess_dataset(config):
         transforms.append(SampleTransform())
     transforms.append(InitEmptyNodeFeatures(dimension=config.init_nodefeatures_dim, strategy=config.init_nodefeatures_strategy))
     if config.add_virtual_node:
-        transforms.append(T.VirtualNode())
+        for _ in range(config.num_virtual_tokens):
+            transforms.append(T.VirtualNode())
     if config.laplacePE > 0:
         transforms.append(T.AddLaplacianEigenvectorPE(k=config.laplacePE, attr_name="laplacePE"))
         if config.model == "gin":

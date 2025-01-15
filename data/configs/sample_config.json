@@ -1,16 +1,19 @@
 {
     "device": 0,
-    "model":"gambaARSP",
+    "model":"gamba",
+    "regularization":"probabilistic",
     "readout": "add",
     "data":"PascalVOC-SP",
-    "epochs":260,
+    "epochs":240,
     "batch_size":64,
+    "pe":"rwse+lPE",
     "laplacePE":4,
-    "hidden_channel":64,
-    "layers": 2,
+    "RW_length":16,
+    "hidden_channel":96,
+    "layers": 1,
     "weight_decay":0.01,
     "learning_rate": 4e-4,
-    "num_virtual_tokens": 64,
+    "num_virtual_tokens": 128,
     "add_virtual_node":false,
     "scheduler": "Plateau",
     "scheduler_patience": 12,
@@ -19,6 +22,6 @@
     "heads":1,
     "verbose": false,
     "simon_gaa": true,
-    "wandb": true,
-    "name": "ARSP pascal 64"
+    "wandb": false,
+    "name": "rwse ARSP func"
 }

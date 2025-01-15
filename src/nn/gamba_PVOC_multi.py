@@ -14,11 +14,19 @@ class SpatialConv(MessagePassing):
         super().__init__(aggr='add')
         # Separate projections for edge features
         self.args = args
-        
-        self.sobel_proj = nn.Linear(1, hidden_channels)  # Sobel filter values
-        self.boundary_proj = nn.Linear(1, hidden_channels)  # Boundary counts
-        edge_dim = 0 if args.data == "PascalVOC-SP" else hidden_channels 
-        assert(args.data == "PascalVOC-SP" or edge_dim==hidden_channels)
+        self.skip_pascal = True
+        if args is None:
+            print("args should be passed")
+            edge_dim = hidden_channels
+        elif args is None:
+            print("WARNING: args data is none. Should only happen during model summary run")
+            edge_dim = hidden_channels
+        else:
+            edge_dim = 0 if args.data == "PascalVOC-SP" else hidden_channels 
+            assert(args.data == "PascalVOC-SP" or edge_dim==hidden_channels)
+            self.skip_pascal = args.data != "PascalVOC-SP"
+            self.sobel_proj = nn.Linear(1, hidden_channels)  # Sobel filter values
+            self.boundary_proj = nn.Linear(1, hidden_channels)  # Boundary counts
         self.node_mlp = get_mlp(
             input_dim=hidden_channels * 2 + edge_dim,  # node_i + node_j (+ edge_dim if not pascal)
             hidden_dim=hidden_channels,
@@ -35,7 +43,7 @@ class SpatialConv(MessagePassing):
         
     def message(self, x_i, x_j, edge_attr):
         # Split edge features
-        if self.args.data == "PascalVOC-SP":
+        if not self.skip_pascal:
             sobel_values = edge_attr[:, 0:1]  # Sobel filter values
             boundary_counts = edge_attr[:, 1:2]  # Boundary pixel counts
         

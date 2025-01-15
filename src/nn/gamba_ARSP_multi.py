@@ -9,27 +9,31 @@ from .mlp import get_mlp
 class MultiScaleARSPBlock(nn.Module):
     def __init__(self, hidden_channels, num_virtual_tokens=4, num_attention_heads=4, args=None):
         super().__init__()
+        self.args = args
         self.num_virtual_tokens = num_virtual_tokens
         # -- Multi-scale SpatialConvs (like GambaSP)
+        self.d = hidden_channels
         spatial_convs = 3
         self.spatial_convs = nn.ModuleList([
             SpatialConv(hidden_channels, args) for _ in range(spatial_convs)  # or however many scales you want
         ])
-        self.gated_gcn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
+        pe_dim = hidden_channels if args.pe == "gnn" else args.laplacePE + args.RW_length
+        if args.pe == "gnn":
+            self.gated_gcn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
         
         # -- GRU approach for virtual tokens (like GambaAR)      
-        self.gru_cell = nn.GRUCell(hidden_channels*2, hidden_channels)
+        self.gru_cell = nn.GRUCell(hidden_channels + pe_dim, hidden_channels + pe_dim)
         weights = get_mlp(
-            input_dim=hidden_channels*3, hidden_dim=hidden_channels*2,
+            input_dim=(hidden_channels+ pe_dim)*2 , hidden_dim=hidden_channels + pe_dim,
             mlp_depth=3, output_dim=1,
             normalization=nn.Identity, last_relu=False
         )
-        self.weights = nn.Sequential(weights, nn.Sigmoid()) 
+        self.weights = nn.Sequential(weights)#, nn.Sigmoid()) 
         # If you want a bigger dimension for the GRU, you can adjust above to "hidden_channels * 2", etc.
 
         # -- Mamba config
         self.mamba = Mamba(
-            d_model = hidden_channels*2,
+            d_model = hidden_channels + pe_dim,
             d_state = 128,
             d_conv = 4,
             expand = 2
@@ -38,7 +42,7 @@ class MultiScaleARSPBlock(nn.Module):
         # -- Merge multi-scale features + final Mamba token
         # Suppose we have 8 SpatialConv outputs + 1 from Mamba = 9 × hidden_channels
         self.merge = get_mlp(
-            input_dim=hidden_channels * (spatial_convs+2),  
+            input_dim=hidden_channels * (spatial_convs+1) + pe_dim,  
             hidden_dim=hidden_channels,
             output_dim=hidden_channels,
             mlp_depth=1,
@@ -46,7 +50,7 @@ class MultiScaleARSPBlock(nn.Module):
             last_relu=False
         )
         
-        self.layer_norm_mamba = nn.LayerNorm(hidden_channels*2)
+        self.layer_norm_mamba = nn.LayerNorm(hidden_channels+ pe_dim)
         self.layer_norm = nn.LayerNorm(hidden_channels)
 
     def forward(self, x, edge_index, edge_attr, batch, **kwargs):
@@ -58,29 +62,34 @@ class MultiScaleARSPBlock(nn.Module):
             """
             #input(f"{x.shape}, {edge_attr.shape}")
             identity = x
-            pe = self.gated_gcn(x, edge_index)
-            probabilistic = False
+            lpe, rwse = kwargs["laplacePE"], kwargs["rwse"]
+            x_orig =x
+            #pe = torch.cat([lpe, rwse], dim=1)
             #Spatial conv thing
             xs = []
             for conv in self.spatial_convs:
                 xs.append(conv(x, edge_index, edge_attr))
-
-            x = torch.cat([x, pe], dim=1)
+            
+            if self.args.pe == "gnn":
+                pe = self.pe_gnn(x, edge_index)
+                x = torch.cat([x, pe], dim=1)
+            else:
+                x = torch.cat([x, lpe, rwse], dim=1)
             #Mamba
             x_dense, mask = to_dense_batch(x, batch)  
             B, maxN, C = x_dense.shape
-            h = torch.zeros(B, int(C/2), device=x.device)  
+            h = torch.zeros(B, x.shape[1], device=x.device)  
 
             tokens = []
             num_tokens = self.num_virtual_tokens if self.training else self.num_virtual_tokens
             for _ in range(num_tokens):
-                #input(torch.cat([x_dense, h.unsqueeze(1).expand(-1, x_dense.shape[1], -1)], dim=-1).shape)
-                probs = self.weights(torch.cat([x_dense, h.unsqueeze(1).expand(-1, x_dense.shape[1], -1)], dim=-1))
-                #input(f"{probs.shape}, {x_dense.shape}")
-                alpha = torch.bernoulli(probs) if probabilistic else probs
-                #input(f"{alpha.shape}, {x_dense.shape}")
+                alpha = self.weights(torch.cat([x_dense, h.unsqueeze(1).expand(-1, x_dense.shape[1], -1)], dim=-1))
+                if self.args.regularization == "attention":
+                    inv_sqrt_d = self.d ** -0.5
+                    alpha = torch.softmax(inv_sqrt_d * alpha, dim=1)
+                elif self.args.regularization == "probabilistic":
+                    alpha = torch.bernoulli(torch.sigmoid(alpha))
                 t = (alpha * x_dense).mean(dim=1)
-                #input(f"{t.shape}, {h.shape}")
                 h = self.gru_cell(t, h)  
                 tokens.append(t) 
 
@@ -181,7 +190,7 @@ class GambaARSP(nn.Module):
 
         # -- Apply each ARSP block
         for layer in self.layers:
-            x = layer(x, edge_index, edge_attr, batch)
+            x = layer(x, edge_index, edge_attr, batch, **kwargs)
 
         # -- Readout
         if self.readout is not None:

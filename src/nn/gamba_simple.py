@@ -35,20 +35,22 @@ class Gamba(nn.Module):
         
         self.input_gin = GINConv(get_mlp(input_dim=first_gin_dim, hidden_dim=hidden_channels, mlp_depth=mlp_depth, output_dim=hidden_channels, normalization=torch.nn.LayerNorm, last_relu=False), train_eps=True)
         
-        self.pe_dims = args.laplacePE + args.RW_length
-        self.pe_gnn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
-
-        self.theta = nn.Linear(hidden_channels+self.pe_dims, num_virtual_tokens, bias=False)
+        pe_dim = hidden_channels if args.pe == "gnn" else args.laplacePE + args.RW_length
+        if args.pe == "gnn":
+            self.pe_gnn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
+        
+        self.theta = nn.Linear(hidden_channels + pe_dim, num_virtual_tokens, bias=False)
+        
         # Configure Mamba
         self.mamba = Mamba(
-            d_model = hidden_channels+self.pe_dims,
+            d_model = hidden_channels + pe_dim,
             d_state = 128,
             d_conv = 4,
             expand = 2
         )
-        self.layer_norm_mamba = nn.LayerNorm(hidden_channels+self.pe_dims)
+        self.layer_norm_mamba = nn.LayerNorm(hidden_channels + pe_dim)
         
-        self.merge = get_mlp(input_dim=hidden_channels*2+self.pe_dims, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=1, normalization=torch.nn.LayerNorm, last_relu=False)
+        self.merge = get_mlp(input_dim=hidden_channels*2 + pe_dim, hidden_dim=hidden_channels, output_dim=hidden_channels, mlp_depth=1, normalization=torch.nn.LayerNorm, last_relu=False)
             
         # Output layers
         last_gin_dim = hidden_channels if use_dec else out_channels
@@ -62,28 +64,37 @@ class Gamba(nn.Module):
             supported_pools = {'add': global_add_pool, 'mean': global_mean_pool, 'max': global_max_pool}
             self.readout = supported_pools.get(use_readout, global_add_pool)
         
-        
     def forward(self, x, edge_index, batch, **kwargs):
         lpe, rwse = kwargs["laplacePE"], kwargs["rwse"]
+
         if self.enc is not None:
             x = self.enc(x)
         x_orig =x
         #pe = torch.cat([lpe, rwse], dim=1)
-        pe = self.pe_gnn(x, edge_index)
-        #x = self.input_gin(x, edge_index)
-
-        x = torch.cat([x, pe], dim=1)
+        if self.args.pe == "gnn":
+            pe = self.pe_gnn(x, edge_index)
+            x = torch.cat([x, pe], dim=1)
+        else:
+            x = torch.cat([x, lpe, rwse], dim=1)    
         x_dense, mask = to_dense_batch(x, batch)
-        alpha = torch.sigmoid(self.theta(x_dense))
-        #alpha = torch.softmax(self.theta(x_dense), dim=1)
-        #alpha_X = alpha.transpose(1,2) @ x_dense
-        #x_mamba = self.mamba(alpha_X)
-        
-        mask = torch.bernoulli(alpha)
-        #mask = top_k_mask(alpha=alpha, k=1)
-        #mask = (alpha > 0.7).float()
-        tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
-        x_mamba = self.mamba(tokens)
+        alpha = self.theta(x_dense)
+        if self.args.regularization == "attention":
+            inv_sqrt_d = self.args.hidden_channel ** -0.5
+            alpha = torch.softmax(inv_sqrt_d * alpha, dim=1)            
+            alpha_X = alpha.transpose(1,2) @ x_dense
+            x_mamba = self.mamba(alpha_X)            
+        elif self.args.regularization == "probabilistic":
+            alpha = torch.sigmoid(alpha)
+            mask = torch.bernoulli(alpha)
+            tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
+            x_mamba = self.mamba(tokens)
+        elif self.args.regularization == "top-k":
+            mask = top_k_mask(alpha=alpha, k=1)
+            tokens = (mask.unsqueeze(-1) * x_dense.unsqueeze(2)).mean(dim=1)
+            x_mamba = self.mamba(tokens)
+        else:
+            alpha_X = alpha.transpose(1,2) @ x_dense
+            x_mamba = self.mamba(alpha_X)
         x_mamba = self.layer_norm_mamba(x_mamba)
 
         x_m = x_mamba[batch]

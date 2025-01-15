@@ -250,7 +250,6 @@ def train(model, train_loader, val_loader, test_loader, atom_encoder, bond_encod
             edge_attr = getattr(batch, 'edge_attr', None)
             output = model(batch.x, batch.edge_index, batch.batch,
                           edge_attr=edge_attr, laplacePE=(None if not hasattr(batch, "laplacePE") else batch.laplacePE), rwse=(None if not hasattr(batch, "random_walk_pe") else batch.random_walk_pe))
-           
             if output.dim() == 1:
                 output = output.unsqueeze(0)
             if loss_fn_name == "BCE":
