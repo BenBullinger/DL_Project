@@ -369,24 +369,38 @@ def run_hyperparameter_optimization(args):
     
     return best_trial.config
 
-def benchmark_model(args, node_sizes, edge_prob=0.1):
+def benchmark_model(args, node_sizes, warmup=10, edge_prob=0.1):
     device = args.device
     
     _, _, _, task_info = load_data(args)
     model = initialize_model(args, task_info).to(device)
     model.eval()
 
-    times = []
-    for num_nodes in node_sizes:
-        print(ERGraph(num_nodes=num_nodes, edge_prob=edge_prob))
+
+    for _ in range(warmup):
+        num_nodes = 100
         er_generator = ERGraph(num_nodes=num_nodes, edge_prob=edge_prob)
         data = er_generator()
-
+        edge_attr = torch.randn(data.edge_index.shape[1], args.hidden_channel) 
         batch = torch.zeros(data.num_nodes, dtype=torch.long, device=device)
 
         start_time = time.time()
         with torch.no_grad():
-            model(torch.rand((num_nodes, task_info["node_feature_dims"]), device=device), data.edge_index, edge_attr=data.edge_attr, batch=batch)
+            model(torch.rand((num_nodes, task_info["node_feature_dims"]), device=device), data.edge_index.to(device), edge_attr=edge_attr.to(device), batch=batch,)
+        end_time = time.time()
+    
+    times = []
+    for num_nodes in node_sizes:
+        model.eval()
+        #print(ERGraph(num_nodes=num_nodes, edge_prob=edge_prob))
+        er_generator = ERGraph(num_nodes=num_nodes, edge_prob=edge_prob)
+        data = er_generator()
+        edge_attr = torch.randn(data.edge_index.shape[1], args.hidden_channel) 
+        batch = torch.zeros(data.num_nodes, dtype=torch.long, device=device)
+
+        start_time = time.time()
+        with torch.no_grad():
+            model(torch.rand((num_nodes, task_info["node_feature_dims"]), device=device), data.edge_index.to(device), edge_attr=edge_attr.to(device), batch=batch)
         end_time = time.time()
 
         times.append(end_time - start_time)

@@ -61,7 +61,6 @@ class SpatialConv(MessagePassing):
             return node_features * edge_importance
 
         else:
-            torch.cat([x_i, x_j, edge_attr], dim=1).shape
             return self.node_mlp(torch.cat([x_i, x_j, edge_attr], dim=1))
         
     def update(self, aggr_out, x):

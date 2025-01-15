@@ -19,7 +19,7 @@ class MultiScaleARSPBlock(nn.Module):
         ])
         pe_dim = hidden_channels if args.pe == "gnn" else args.laplacePE + args.RW_length
         if args.pe == "gnn":
-            self.gated_gcn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
+            self.pe_gnn = GatedGraphConv(out_channels=hidden_channels, num_layers=8)
         
         # -- GRU approach for virtual tokens (like GambaAR)      
         self.gru_cell = nn.GRUCell(hidden_channels + pe_dim, hidden_channels + pe_dim)
