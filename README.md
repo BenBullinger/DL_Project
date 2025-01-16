@@ -45,6 +45,7 @@ if __name__ == "__main__":
 
 Each experiment is repeated with different random seeds for `num_trials` trials. The results and aggregate statistics (mean and standard deviation) across the experimental trials are saved to the `results` directory.
 
+Configs used in the paper are found in [here](data/configs/Paper_Experiments)
 
 #### Using Google Colab:
 
